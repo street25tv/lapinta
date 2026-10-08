@@ -5,13 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>LA PINTA · Reserva tu cita</title>
 <meta name="description" content="Reserva tu cita en LA PINTA Barbería en segundos.">
-<meta name="theme-color" content="#111111">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="image.jpg">
+<link rel="apple-touch-icon" href="image.jpg">
+<meta property="og:image" content="https://street25tv.github.io/lapinta/image.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f0f0f; --card: #1a1a1a; --card2: #222; --line: #2e2e2e;
+    --bg: #010101; --card: #161616; --card2: #222; --line: #2e2e2e;
     --txt: #f2f2f2; --sub: #a3a3a3; --acc: #e0b04a; --acc-txt: #161208;
     --ok: #2fbf71; --err: #ff6b6b; --wa: #25d366;
   }
@@ -22,11 +25,11 @@
 
   header { padding: 22px 16px 8px; text-align: center; background:
     repeating-linear-gradient(135deg, #b3262d 0 10px, #f2f2f2 10px 20px, #1f4fa8 20px 30px, #f2f2f2 30px 40px) top / 100% 6px no-repeat; }
-  .logo { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 52px; letter-spacing: 3px; line-height: 1; margin-top: 12px; }
-  .logo span { color: var(--acc); }
+  .logo { margin: 6px auto 0; }
+  .logo img { width: min(260px, 68vw); height: auto; display: block; margin: 0 auto; }
   .lema { color: var(--sub); font-size: 13px; margin-top: 2px; }
 
-  nav { position: sticky; top: 0; z-index: 5; background: rgba(15,15,15,.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  nav { position: sticky; top: 0; z-index: 5; background: rgba(1,1,1,.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
   nav .wrap { display: flex; gap: 6px; padding: 10px 16px; }
   nav button { flex: 1; border: 0; background: transparent; padding: 10px 6px; border-radius: 10px; color: var(--sub); font-weight: 600; cursor: pointer; }
   nav button.on { background: var(--acc); color: var(--acc-txt); }
@@ -79,8 +82,8 @@
 </head>
 <body>
 <header>
-  <div class="logo">LA <span>PINTA</span></div>
-  <div class="lema" id="lema">Barbería</div>
+  <h1 class="logo"><img src="image.jpg" alt="LA PINTA Barbería · Buen corte, mejor actitud" width="260" height="260"></h1>
+  <div class="lema" id="lema"></div>
 </header>
 <nav><div class="wrap">
   <button data-tab="reservar" class="on">Reservar</button>
@@ -312,7 +315,7 @@ function vistaPlanes() {
 /* ---------- Inicio ---------- */
 function pintarDatos() {
   document.title = D.negocio + ' · Reserva tu cita';
-  $('#lema').textContent = 'Barbería' + (D.ciudad ? ' · ' + D.ciudad : '');
+  $('#lema').textContent = D.ciudad || '';
   const horas = D.horario.map((h, i) => DIAS[i] + ' ' + (cerrado(h) ? 'cerrado' : h.replace('-', '–'))).slice(1).concat(DIAS[0] + ' ' + (cerrado(D.horario[0]) ? 'cerrado' : D.horario[0].replace('-', '–')));
   $('#info').innerHTML = esc(D.direccion) + (D.ciudad ? ', ' + esc(D.ciudad) : '') + '<br>' + esc(horas.join(' · '));
   if (D.whatsapp) { const s = $('#soporte'); s.href = waLink(D.whatsapp, 'Hola, tengo una pregunta.'); s.classList.remove('hidden'); }
