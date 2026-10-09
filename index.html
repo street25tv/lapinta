@@ -43,6 +43,14 @@
   .opt b { font-weight: 600; }
   .opt .meta { color: var(--sub); font-size: 13px; white-space: nowrap; }
   .opt.on { border-color: var(--acc); background: #241e10; }
+  .barb { display: flex; gap: 12px; align-items: center; width: 100%; background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; cursor: pointer; }
+  .barb.on { border-color: var(--acc); background: #241e10; }
+  .barb .foto { flex: 0 0 60px; width: 60px; height: 60px; border-radius: 50%; background: #2a2a2a center / cover no-repeat; border: 2px solid var(--acc);
+                display: flex; align-items: center; justify-content: center; font-family: 'Bebas Neue', Impact, sans-serif; font-size: 26px; color: var(--acc); }
+  .barb .datos { flex: 1; min-width: 0; }
+  .barb .datos b { display: block; font-size: 16px; }
+  .barb .dir { color: var(--sub); font-size: 13px; }
+  .mapa { display: inline-block; margin-top: 6px; font-size: 13px; font-weight: 600; color: var(--acc); text-decoration: none; border: 1px solid #5c4a1c; border-radius: 8px; padding: 4px 9px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chips::-webkit-scrollbar { display: none; }
   .chip { flex: 0 0 auto; min-width: 64px; text-align: center; background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 8px 10px; cursor: pointer; }
@@ -115,7 +123,7 @@ const guardar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } 
 const leerLS = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
 
 let D = null;               // datos del negocio
-const R = { servicio: null, barbero: '*', fecha: null, hora: null };
+const R = { barbero: null, servicio: null, fecha: null, hora: null };
 
 /* Llamadas a la API con reintentos (tras publicar, Google responde error unos minutos). */
 async function api(params, post) {
@@ -155,15 +163,55 @@ function tab(nombre) {
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => tab(b.dataset.tab));
 
 /* ---------- Reservar ---------- */
+let FOTOS = leerLS('fotos') || {}; // { B01: { v: versión, src: 'data:image/...' } }
+
+function fotoHtml(b) {
+  const f = FOTOS[b.id];
+  const ok = b.foto && f && f.v === b.foto && /^data:image\//.test(f.src);
+  return ok
+    ? `<div class="foto" data-foto="${esc(b.id)}" role="img" aria-label="Foto de ${esc(b.nombre)}" style="background-image:url('${f.src}')"></div>`
+    : `<div class="foto" data-foto="${esc(b.id)}" aria-hidden="true">${esc(String(b.nombre || '?').trim().charAt(0).toUpperCase())}</div>`;
+}
+
+async function cargarFotos() {
+  const falta = D.barberos.some(b => b.foto && (!FOTOS[b.id] || FOTOS[b.id].v !== b.foto));
+  if (!falta) return;
+  try {
+    const r = await api({ a: 'fotos' });
+    const nuevo = {};
+    D.barberos.forEach(b => { if (b.foto && r.fotos[b.id]) nuevo[b.id] = { v: b.foto, src: r.fotos[b.id] }; });
+    FOTOS = nuevo;
+    guardar('fotos', FOTOS);
+    document.querySelectorAll('[data-foto]').forEach(el => {
+      const b = D.barberos.find(x => x.id === el.dataset.foto);
+      if (b) el.outerHTML = fotoHtml(b);
+    });
+  } catch (e) { /* sin fotos, quedan las iniciales */ }
+}
+
+const mapaBtn = b => b.mapa ? `<a class="mapa" href="${esc(b.mapa)}" target="_blank" rel="noopener" data-mapa>Cómo llegar ↗</a>` : '';
+
 function vistaReservar() {
   const v = $('#v-reservar');
-  const serv = D.servicios.find(s => s.id === R.servicio);
-  let html = '<h2>1 · Servicio</h2><div class="grid">' + D.servicios.map(s =>
-    `<button class="opt ${s.id === R.servicio ? 'on' : ''}" data-s="${esc(s.id)}"><b>${esc(s.nombre)}</b><span class="meta">${pesos(s.precio)} · ${s.dur} min</span></button>`).join('') + '</div>';
+  const barb = D.barberos.find(b => b.id === R.barbero);
+  const servs = barb ? D.servicios.filter(s => (barb.servicios || []).indexOf(s.id) >= 0) : [];
+  if (barb && R.servicio && !servs.some(s => s.id === R.servicio)) { R.servicio = null; R.hora = null; }
+  const serv = servs.find(s => s.id === R.servicio);
+  let html = '<h2>1 · Barbero</h2><div class="grid">' + D.barberos.map(b => `
+    <div class="barb ${b.id === R.barbero ? 'on' : ''}" data-b="${esc(b.id)}" role="button" tabindex="0" aria-pressed="${b.id === R.barbero}">
+      ${fotoHtml(b)}
+      <div class="datos">
+        <b>${esc(b.nombre)}</b>
+        <div class="dir">${esc(b.direccion || D.direccion || '')}</div>
+        ${mapaBtn(b)}
+      </div>
+    </div>`).join('') + '</div>';
+  if (barb) {
+    html += '<h2 id="paso2">2 · Servicio</h2>' + (servs.length ? '<div class="grid">' + servs.map(s =>
+      `<button class="opt ${s.id === R.servicio ? 'on' : ''}" data-s="${esc(s.id)}"><b>${esc(s.nombre)}</b><span class="meta">${pesos(s.precio)} · ${s.dur} min</span></button>`).join('') + '</div>'
+      : '<p class="muted">Este barbero todavía no tiene servicios disponibles.</p>');
+  }
   if (serv) {
-    html += '<h2>2 · Barbero</h2><div class="chips">' +
-      [{ id: '*', nombre: 'Cualquiera' }].concat(D.barberos).map(b =>
-        `<button class="chip ${b.id === R.barbero ? 'on' : ''}" data-b="${esc(b.id)}"><b style="font-size:15px">${esc(b.nombre.split(' ')[0])}</b></button>`).join('') + '</div>';
     html += '<h2>3 · Día</h2><div class="chips">';
     const hoy = deISO(D.hoy);
     for (let i = 0; i <= D.dias; i++) {
@@ -176,12 +224,12 @@ function vistaReservar() {
   }
   if (serv && R.fecha) html += '<h2>4 · Hora</h2><div id="horas" class="cargando">Buscando horarios libres…</div>';
   if (serv && R.fecha && R.hora) {
-    const nb = R.barbero === '*' ? 'El que esté libre' : D.barberos.find(b => b.id === R.barbero).nombre;
     const yo = leerLS('cliente') || {};
     html += `<h2>5 · Tus datos</h2>
       <div class="card resumen">
+        <div><span>Barbero</span><b>${esc(barb.nombre)}</b></div>
+        <div><span>Dónde</span><b>${esc(barb.direccion || D.direccion || '')}</b></div>
         <div><span>Servicio</span><b>${esc(serv.nombre)}</b></div>
-        <div><span>Barbero</span><b>${esc(nb)}</b></div>
         <div><span>Cuándo</span><b>${esc(fechaLarga(R.fecha))}, ${hora12(R.hora)}</b></div>
         <div><span>Precio</span><b>${pesos(serv.precio)}</b></div>
       </div>
@@ -192,8 +240,17 @@ function vistaReservar() {
       <p class="muted">Pagas en la barbería. ${esc(D.advertencia)}</p>`;
   }
   v.innerHTML = html;
+  v.querySelectorAll('[data-b]').forEach(el => {
+    const elegir = () => {
+      const cambio = R.barbero !== el.dataset.b;
+      if (cambio) { R.barbero = el.dataset.b; R.servicio = null; R.fecha = null; R.hora = null; }
+      vistaReservar();
+      if (cambio) setTimeout(() => { const p = $('#paso2'); if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+    };
+    el.onclick = e => { if (!e.target.closest('[data-mapa]')) elegir(); };
+    el.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-mapa]')) { e.preventDefault(); elegir(); } };
+  });
   v.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { R.servicio = b.dataset.s; R.hora = null; vistaReservar(); });
-  v.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { R.barbero = b.dataset.b; R.hora = null; vistaReservar(); });
   v.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { R.fecha = b.dataset.f; R.hora = null; vistaReservar(); });
   if (serv && R.fecha) cargarHoras();
   if ($('#confirmar')) $('#confirmar').onclick = confirmar;
@@ -242,15 +299,17 @@ async function confirmar() {
         <div class="resumen" style="margin-top:8px">
           <div><span>Servicio</span><b>${esc(r.servicio)}</b></div>
           <div><span>Barbero</span><b>${esc(r.barbero)}</b></div>
+          <div><span>Dónde</span><b>${esc(r.direccion || D.direccion || '')}</b></div>
           <div><span>Cuándo</span><b>${esc(r.fechaTxt)}, ${esc(r.hora12)}</b></div>
           <div><span>Precio</span><b>${pesos(r.precio)}</b></div>
         </div>
       </div>
+      ${r.mapa ? `<a class="btn sec" target="_blank" rel="noopener" href="${esc(r.mapa)}">Cómo llegar (Google Maps)</a>` : ''}
       <p class="muted">Te escribiremos por WhatsApp para confirmarla. Guarda este enlace para consultar o cancelar tu cita:</p>
       <div class="card" style="word-break:break-all;font-size:13px">${esc(enlace)}</div>
       ${D.whatsapp ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(waLink(D.whatsapp, msg))}">Avisar por WhatsApp</a>` : ''}
       <button class="btn sec" id="otra">Hacer otra reserva</button>`;
-    $('#otra').onclick = () => { R.servicio = null; R.barbero = '*'; R.fecha = null; R.hora = null; vistaReservar(); };
+    $('#otra').onclick = () => { R.servicio = null; R.barbero = null; R.fecha = null; R.hora = null; vistaReservar(); };
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Confirmar reserva';
@@ -288,7 +347,9 @@ async function consultar() {
           <div><span>Servicio</span><b>${esc(r.servicio)}</b></div>
           <div><span>Barbero</span><b>${esc(r.barbero)}</b></div>
           <div><span>Cuándo</span><b>${esc(r.fechaTxt)}, ${esc(r.hora12)}</b></div>
+          <div><span>Dónde</span><b>${esc(r.direccion || D.direccion || '')}</b></div>
         </div>
+        ${r.mapa ? `<a class="mapa" target="_blank" rel="noopener" href="${esc(r.mapa)}">Cómo llegar ↗</a>` : ''}
       </div>
       ${r.membresia ? `<div class="card"><b>${esc(r.membresia.plan)}</b><div class="muted">Te quedan ${r.membresia.restantes} servicios · vence el ${esc(r.membresia.vence)}</div></div>` : ''}
       ${r.cancelable ? '<button class="btn sec" id="mc-cancelar">Cancelar esta cita</button>' : ''}`;
@@ -330,6 +391,7 @@ function pintarDatos() {
     const r = await api({ a: 'datos' });
     D = r; guardar('datos', r); pintarDatos();
     if (!q.get('cita')) vistaReservar();
+    cargarFotos();
   } catch (e) {
     if (!previo) $('#v-reservar').innerHTML = '<div class="err">' + esc(e.message) + '</div><button class="btn sec" onclick="location.reload()">Reintentar</button>';
   }
