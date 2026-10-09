@@ -54,6 +54,16 @@
   .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .cita { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
   .cita:last-child { border: 0; }
+  .tabs { display: flex; gap: 6px; margin-top: 10px; }
+  .tabs button { flex: 1; border: 0; background: var(--card); padding: 10px; border-radius: 10px; color: var(--sub); font-weight: 600; cursor: pointer; }
+  .tabs button.on { background: var(--acc); color: var(--acc-txt); }
+  .perfil-foto { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .foto-grande { width: 96px; height: 96px; border-radius: 50%; background: #2a2a2a center / cover no-repeat; border: 2px solid var(--acc);
+                 display: flex; align-items: center; justify-content: center; font-family: 'Bebas Neue', Impact, sans-serif; font-size: 42px; color: var(--acc); }
+  .serv { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; margin: 0; border-bottom: 1px dashed var(--line); color: var(--txt); font-size: 14px; cursor: pointer; }
+  .serv:last-child { border: 0; }
+  .serv input { width: 22px; height: 22px; flex: 0 0 22px; accent-color: var(--acc); }
+  .mapa { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--acc); text-decoration: none; border: 1px solid #5c4a1c; border-radius: 8px; padding: 5px 10px; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -179,7 +189,7 @@ function pintar(msg, tipo) {
   const d = W.dias.find(x => x.fecha === sel);
   const sinTurnos = W.dias.slice(0, 7).filter(x => x.tienda && x.base && !x.bloques.length).length; // solo días que trabaja según su horario base
   let html = `
-    <div class="top"><div>Hola <b>${esc(W.nombre.split(' ')[0])}</b></div><button class="link" id="salir">Salir</button></div>
+    ${topHtml('turnos')}
     ${sinTurnos ? `<div class="card"><b>${sinTurnos} ${sinTurnos === 1 ? 'día' : 'días'} sin turno</b> en los próximos 7 días. Si no habilitas turnos, los clientes no pueden reservar contigo.
       <button class="btn sec" id="base">Usar mi horario base en los próximos 7 días</button></div>` : ''}
     <h2>Elige el día</h2>
@@ -217,7 +227,7 @@ function pintar(msg, tipo) {
       : '<p class="muted">Sin citas todavía.</p>'}</div>`;
   $('#app').innerHTML = html;
 
-  $('#salir').onclick = () => salir();
+  enlacesTop();
   document.querySelectorAll('[data-f]').forEach(b => b.onclick = () => elegir(b.dataset.f));
   if ($('#base')) $('#base').onclick = async () => {
     const b = $('#base'); b.disabled = true; b.textContent = 'Habilitando…';
@@ -248,6 +258,124 @@ function pintar(msg, tipo) {
       await cargarSemana(true);
       pintar(r.texto, 'ok');
     } catch (e) { b.disabled = false; b.textContent = 'Guardar'; $('#msg').className = 'err'; $('#msg').textContent = e.message; }
+  };
+}
+
+/* ---------- Mi perfil ---------- */
+let PF = null;          // datos del perfil
+let fotoNueva;          // undefined = sin cambio, '' = quitar, 'data:...' = nueva
+
+function topHtml(v) {
+  return `<div class="top"><div>Hola <b>${esc(S.nombre.split(' ')[0])}</b></div><button class="link" id="salir">Salir</button></div>
+    <div class="tabs"><button class="${v === 'turnos' ? 'on' : ''}" data-v="turnos">Mis turnos</button><button class="${v === 'perfil' ? 'on' : ''}" data-v="perfil">Mi perfil</button></div>`;
+}
+
+function enlacesTop() {
+  $('#salir').onclick = () => salir();
+  document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => {
+    if (b.dataset.v === 'perfil') vistaPerfil();
+    else if (W) pintar(); else cargarSemana();
+  });
+}
+
+function procesarImagen(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const lado = Math.min(img.width, img.height), t = 240;
+      const c = document.createElement('canvas'); c.width = t; c.height = t;
+      const g = c.getContext('2d');
+      g.fillStyle = '#000'; g.fillRect(0, 0, t, t);
+      g.drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, t, t);
+      URL.revokeObjectURL(url);
+      let q = 0.85, d = c.toDataURL('image/jpeg', q);
+      while (d.length > 40000 && q > 0.45) { q -= 0.1; d = c.toDataURL('image/jpeg', q); }
+      if (d.length > 44000) {
+        const c2 = document.createElement('canvas'); c2.width = 160; c2.height = 160;
+        c2.getContext('2d').drawImage(c, 0, 0, 160, 160);
+        d = c2.toDataURL('image/jpeg', 0.7);
+      }
+      res(d);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('No pudimos leer esa imagen. Prueba con una foto JPG o PNG.')); };
+    img.src = url;
+  });
+}
+
+function pintarFoto() {
+  const f = fotoNueva !== undefined ? fotoNueva : PF.foto;
+  const el = $('#pf-img');
+  if (f) { el.style.backgroundImage = "url('" + f + "')"; el.textContent = ''; }
+  else { el.style.backgroundImage = ''; el.textContent = S.nombre.trim().charAt(0).toUpperCase(); }
+  $('#pf-quitar').classList.toggle('hidden', !f);
+}
+
+function enlaceMapa() {
+  const m = $('#pf-mapa').value.trim(), d = $('#pf-dir').value.trim();
+  const href = m || (d ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(d) : '');
+  const a = $('#pf-probar');
+  a.classList.toggle('hidden', !href);
+  if (href) a.href = href;
+}
+
+async function vistaPerfil() {
+  $('#app').innerHTML = topHtml('perfil') + '<p class="muted" style="text-align:center">Cargando tu perfil…</p>';
+  enlacesTop();
+  try { PF = await api({ a: 'bPerfil', token: S.token }); }
+  catch (e) { if (S) $('#app').innerHTML = topHtml('perfil') + `<div class="err">${esc(e.message)}</div>`; if (S) enlacesTop(); return; }
+  fotoNueva = undefined;
+  const todos = !PF.servicios.length;
+  $('#app').innerHTML = topHtml('perfil') + `
+    <p class="muted">Así te ven los clientes en la web de reservas.</p>
+    <div class="card">
+      <b>Foto o logo</b>
+      <div class="perfil-foto">
+        <div class="foto-grande" id="pf-img" role="img" aria-label="Tu foto"></div>
+        <label class="btn mini sec" for="pf-file">Cambiar foto</label>
+        <input type="file" id="pf-file" accept="image/*" class="hidden">
+        <button class="btn mini sec" id="pf-quitar">Quitar</button>
+      </div>
+      <p class="muted">Se muestra en círculo. Usa una imagen cuadrada y clara.</p>
+    </div>
+    <div class="card">
+      <label for="pf-dir">Dirección donde atiendes</label>
+      <input id="pf-dir" maxlength="140" value="${esc(PF.direccion)}" placeholder="Calle 72 # 45-10, local 2">
+      <label for="pf-mapa">Enlace de Google Maps (opcional)</label>
+      <input id="pf-mapa" inputmode="url" value="${esc(PF.mapa)}" placeholder="https://maps.app.goo.gl/...">
+      <p class="muted">En Google Maps busca tu local → Compartir → Copiar enlace, y pégalo aquí. Si lo dejas vacío, usamos la dirección.</p>
+      <a id="pf-probar" class="mapa hidden" target="_blank" rel="noopener">Probar ubicación ↗</a>
+    </div>
+    <div class="card">
+      <b>Servicios que ofreces</b>
+      ${PF.catalogo.map(s => `<label class="serv"><span>${esc(s.nombre)} <span class="muted">· $${String(s.precio).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} · ${s.dur} min</span></span>
+        <input type="checkbox" value="${esc(s.id)}" ${todos || PF.servicios.indexOf(s.id) >= 0 ? 'checked' : ''}></label>`).join('')}
+    </div>
+    <div id="pf-msg" class="err"></div>
+    <button class="btn" id="pf-guardar">Guardar perfil</button>`;
+  enlacesTop();
+  pintarFoto(); enlaceMapa();
+  $('#pf-dir').oninput = enlaceMapa; $('#pf-mapa').oninput = enlaceMapa;
+  $('#pf-file').onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    $('#pf-msg').className = 'muted'; $('#pf-msg').textContent = 'Procesando imagen…';
+    try { fotoNueva = await procesarImagen(file); pintarFoto(); $('#pf-msg').textContent = 'Foto lista. Toca "Guardar perfil" para publicarla.'; }
+    catch (err) { $('#pf-msg').className = 'err'; $('#pf-msg').textContent = err.message; }
+    e.target.value = '';
+  };
+  $('#pf-quitar').onclick = () => { fotoNueva = ''; pintarFoto(); };
+  $('#pf-guardar').onclick = async () => {
+    const servicios = Array.from(document.querySelectorAll('.serv input:checked')).map(i => i.value);
+    const b = $('#pf-guardar'); b.disabled = true; b.textContent = 'Guardando…';
+    $('#pf-msg').className = 'err'; $('#pf-msg').textContent = '';
+    try {
+      const r = await api({ a: 'bGuardarPerfil', token: S.token, direccion: $('#pf-dir').value, mapa: $('#pf-mapa').value, servicios, foto: fotoNueva === undefined ? null : fotoNueva });
+      if (fotoNueva !== undefined) PF.foto = fotoNueva;
+      fotoNueva = undefined;
+      $('#pf-msg').className = 'okmsg'; $('#pf-msg').textContent = r.texto;
+    } catch (e) { $('#pf-msg').textContent = e.message; }
+    b.disabled = false; b.textContent = 'Guardar perfil';
   };
 }
 
