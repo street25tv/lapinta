@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LA PINTA · Administración</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="image.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #010101; --card: #161616; --card2: #222; --line: #2e2e2e; --txt: #f2f2f2; --sub: #a3a3a3;
+          --acc: #e0b04a; --acc-txt: #161208; --ok: #2fbf71; --err: #ff6b6b; --wa: #25d366; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--txt); font: 15px/1.45 Inter, system-ui, sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 16px 60px; }
+  header { text-align: center; padding: 14px 16px 4px; background:
+    repeating-linear-gradient(135deg, #b3262d 0 10px, #f2f2f2 10px 20px, #1f4fa8 20px 30px, #f2f2f2 30px 40px) top / 100% 6px no-repeat; }
+  header img { width: 90px; height: auto; margin-top: 8px;
+    -webkit-mask-image: radial-gradient(circle closest-side, #000 92%, transparent 100%); mask-image: radial-gradient(circle closest-side, #000 92%, transparent 100%); }
+  .titulo { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 26px; letter-spacing: 1px; }
+  h2 { font-family: 'Bebas Neue', Impact, sans-serif; font-weight: 400; letter-spacing: 1px; font-size: 24px; margin: 20px 0 8px; }
+  label { display: block; font-size: 13px; color: var(--sub); margin: 12px 0 5px; }
+  input, select { width: 100%; background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; outline: none; }
+  input:focus, select:focus { border-color: var(--acc); }
+  .btn { display: block; width: 100%; border: 0; border-radius: 14px; padding: 14px; font-weight: 700; font-size: 16px; cursor: pointer;
+         background: var(--acc); color: var(--acc-txt); margin-top: 14px; text-align: center; text-decoration: none; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.sec { background: var(--card2); color: var(--txt); }
+  .btn.wa { background: var(--wa); color: #06210f; }
+  .btn.mini { display: inline-block; width: auto; padding: 8px 12px; font-size: 14px; margin: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-top: 10px; }
+  .muted { color: var(--sub); font-size: 13px; }
+  .err { color: var(--err); font-size: 14px; margin-top: 10px; }
+  .okmsg { color: var(--ok); font-size: 14px; margin-top: 10px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+  .link { background: none; border: 0; color: var(--sub); text-decoration: underline; cursor: pointer; padding: 6px; }
+  .fila { display: flex; gap: 8px; }
+  .fila > * { flex: 1; min-width: 0; }
+  .barb { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .barb b { font-size: 16px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; vertical-align: middle; }
+  .tag.si { background: #10261a; color: var(--ok); } .tag.no { background: #2a1414; color: var(--err); }
+  .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .pin { font-family: ui-monospace, Menlo, monospace; letter-spacing: 2px; }
+  .dia { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 5px; align-items: center; margin-top: 8px; }
+  .dia b { font-size: 14px; }
+  .dia input[type=time] { padding: 9px 4px; min-width: 0; font-size: 14px; }
+  .dia .libre { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--sub); margin: 0; }
+  .dia .libre input { width: 18px; height: 18px; accent-color: var(--acc); }
+  .dia.off input[type=time] { opacity: .3; }
+  .switch { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--txt); font-size: 15px; }
+  .switch input { width: 22px; height: 22px; accent-color: var(--acc); }
+  .exito { border-color: #1f6b43; background: #10261a; }
+  .grande { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 40px; letter-spacing: 3px; color: var(--acc); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <img src="image.jpg" alt="LA PINTA Barbería" width="90" height="90">
+  <div class="titulo">Administración</div>
+</header>
+<main class="wrap" id="app"><p class="muted" style="text-align:center">Cargando…</p></main>
+
+<script>
+/* Misma API de la web de reservas. */
+const API = 'https://script.google.com/macros/s/AKfycbww7Rb-iJORoP9w7244ZZRUBUTDEQHgnBvj28PEhrn79vUb3l5BlB_zzW3M9bJoP4dJyQ/exec';
+const PORTAL = 'https://street25tv.github.io/lapinta/barberos.html';
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ls = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+let S = ls.get('sesionAdmin'); // { token, hasta }
+let L = [];                    // barberos
+
+async function api(params) {
+  for (let i = 0; i < 4; i++) {
+    try {
+      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(params) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      if (!j.ok) { const e = new Error(j.error || 'Error'); e.final = true; throw e; }
+      return j;
+    } catch (e) {
+      if (e.final) { if (/sesión expiró/.test(e.message)) salir(e.message); throw e; }
+      await new Promise(res => setTimeout(res, 800 * (i + 1)));
+    }
+  }
+  throw new Error('No pudimos conectar. Revisa tu internet.');
+}
+
+const waLink = (tel, txt) => 'https://wa.me/' + tel + '?text=' + encodeURIComponent(txt);
+const msgBienvenida = (nombre, pin) => 'Hola ' + nombre.split(' ')[0] + ', bienvenido a LA PINTA. Entra a tu portal de barbero: ' + PORTAL +
+  '\nTu PIN es ' + pin + ' (no lo compartas).\n1) En "Mi perfil" sube tu foto, dirección, servicios y fotos de tus trabajos.\n2) En "Mis turnos" habilita tu horario para recibir reservas.';
+
+/* ---------- Ingreso ---------- */
+function vistaLogin(msg) {
+  $('#app').innerHTML = `
+    <h2>Entrar</h2>
+    <label for="clave">Clave de administrador</label>
+    <input id="clave" type="password" autocomplete="current-password" autocapitalize="characters" placeholder="••••••••">
+    <div class="err" id="err">${esc(msg || '')}</div>
+    <button class="btn" id="entrar">Entrar</button>
+    <p class="muted">La clave la consultas en Telegram con /claveadmin.</p>`;
+  const entrar = async () => {
+    const b = $('#entrar'); b.disabled = true; $('#err').textContent = '';
+    try {
+      const r = await api({ a: 'aLogin', clave: $('#clave').value });
+      S = { token: r.token, hasta: Date.now() + 5.5 * 3600 * 1000 };
+      ls.set('sesionAdmin', S);
+      cargar();
+    } catch (e) { b.disabled = false; $('#err').textContent = e.message; }
+  };
+  $('#entrar').onclick = entrar;
+  $('#clave').onkeydown = e => { if (e.key === 'Enter') entrar(); };
+}
+
+function salir(msg) { ls.del('sesionAdmin'); S = null; vistaLogin(msg); }
+
+/* ---------- Lista ---------- */
+async function cargar(msg) {
+  $('#app').innerHTML = '<p class="muted" style="text-align:center">Cargando barberos…</p>';
+  try { L = (await api({ a: 'aBarberos', token: S.token })).barberos; vistaLista(msg); }
+  catch (e) { if (S) $('#app').innerHTML = `<div class="err">${esc(e.message)}</div><button class="btn sec" id="re">Reintentar</button>`; if ($('#re')) $('#re').onclick = () => cargar(); }
+}
+
+function vistaLista(msg) {
+  const activos = L.filter(b => b.activo).length;
+  $('#app').innerHTML = `
+    <div class="top"><div class="muted">${L.length} barberos · ${activos} activos</div><button class="link" id="salir">Salir</button></div>
+    <button class="btn" id="nuevo">+ Nuevo barbero</button>
+    ${msg ? `<div class="okmsg">${esc(msg)}</div>` : ''}
+    <h2>Barberos</h2>
+    ${L.map(b => `
+      <div class="card">
+        <div class="barb"><div><b>${esc(b.nombre)}</b><span class="tag ${b.activo ? 'si' : 'no'}">${b.activo ? 'Activo' : 'Inactivo'}</span>
+          <div class="muted">${esc(b.id)} · ${b.tipo === 'Arriendo' ? 'Arriendo $' + Number(b.arriendo || 0).toLocaleString('es-CO') : 'Comisión ' + (b.pct === '' ? '-' : b.pct) + '%'}${b.whatsapp ? ' · ' + esc(b.whatsapp) : ''}</div></div></div>
+        <div class="muted" style="margin-top:6px">PIN: <span class="pin" data-pin="${esc(b.id)}">••••</span></div>
+        <div class="acciones">
+          <button class="btn mini sec" data-ver="${esc(b.id)}">Ver PIN</button>
+          <button class="btn mini sec" data-editar="${esc(b.id)}">Editar</button>
+          <button class="btn mini sec" data-nuevopin="${esc(b.id)}">Nuevo PIN</button>
+          ${b.whatsapp && b.pin ? `<a class="btn mini sec" target="_blank" rel="noopener" href="${esc(waLink(b.whatsapp, msgBienvenida(b.nombre, b.pin)))}">Enviar acceso</a>` : ''}
+        </div>
+      </div>`).join('') || '<p class="muted">Todavía no hay barberos.</p>'}`;
+  $('#salir').onclick = () => salir();
+  $('#nuevo').onclick = () => vistaForm(null);
+  document.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => {
+    const x = L.find(y => y.id === b.dataset.ver), el = document.querySelector(`[data-pin="${b.dataset.ver}"]`);
+    const ver = el.textContent === '••••';
+    el.textContent = ver ? (x.pin || 'sin PIN') : '••••';
+    b.textContent = ver ? 'Ocultar' : 'Ver PIN';
+  });
+  document.querySelectorAll('[data-editar]').forEach(b => b.onclick = () => vistaForm(L.find(y => y.id === b.dataset.editar)));
+  document.querySelectorAll('[data-nuevopin]').forEach(b => b.onclick = async () => {
+    const x = L.find(y => y.id === b.dataset.nuevopin);
+    if (!confirm('¿Crear un PIN nuevo para ' + x.nombre + '? El anterior deja de funcionar.')) return;
+    b.disabled = true;
+    try { const r = await api({ a: 'aNuevoPin', token: S.token, id: x.id }); x.pin = r.pin; vistaLista(r.texto); }
+    catch (e) { b.disabled = false; alert(e.message); }
+  });
+}
+
+/* ---------- Formulario ---------- */
+function filaDia(d, valor) {
+  const libre = !/^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(valor || '');
+  const [a, b] = libre ? ['09:00', '19:00'] : valor.split('-');
+  return `<div class="dia ${libre ? 'off' : ''}" data-dia="${d}">
+    <b>${d}</b>
+    <input type="time" step="900" value="${a}" aria-label="${d} desde" ${libre ? 'disabled' : ''}>
+    <span class="muted">a</span>
+    <input type="time" step="900" value="${b}" aria-label="${d} hasta" ${libre ? 'disabled' : ''}>
+    <label class="libre"><input type="checkbox" ${libre ? 'checked' : ''}> Libre</label>
+  </div>`;
+}
+
+function vistaForm(b) {
+  const nuevo = !b;
+  b = b || { nombre: '', whatsapp: '', tipo: 'Comisión', pct: 50, arriendo: '', activo: true,
+             horario: { Lun: '09:00-19:00', Mar: '09:00-19:00', 'Mié': '09:00-19:00', Jue: '09:00-19:00', Vie: '09:00-19:00', 'Sáb': '09:00-19:00', Dom: 'Libre' } };
+  $('#app').innerHTML = `
+    <div class="top"><button class="link" id="volver">← Volver</button><button class="link" id="salir">Salir</button></div>
+    <h2>${nuevo ? 'Nuevo barbero' : 'Editar ' + esc(b.nombre)}</h2>
+    <div class="card">
+      <label for="f-nombre">Nombre y apellido</label>
+      <input id="f-nombre" maxlength="60" value="${esc(b.nombre)}" placeholder="Sebastián Mejía">
+      <label for="f-tel">WhatsApp</label>
+      <input id="f-tel" type="tel" inputmode="numeric" value="${esc(b.whatsapp)}" placeholder="300 123 4567">
+      <div class="fila">
+        <div><label for="f-tipo">Tipo de pago</label>
+          <select id="f-tipo"><option ${b.tipo !== 'Arriendo' ? 'selected' : ''}>Comisión</option><option ${b.tipo === 'Arriendo' ? 'selected' : ''}>Arriendo</option></select></div>
+        <div id="c-pct"><label for="f-pct">% comisión</label><input id="f-pct" type="number" min="0" max="100" value="${esc(b.pct)}"></div>
+        <div id="c-arr"><label for="f-arr">Arriendo semanal</label><input id="f-arr" type="number" min="0" step="10000" value="${esc(b.arriendo)}" placeholder="300000"></div>
+      </div>
+      <label class="switch"><input type="checkbox" id="f-activo" ${b.activo ? 'checked' : ''}> Activo (aparece en la web y puede entrar al portal)</label>
+    </div>
+    <div class="card">
+      <b>Horario base</b>
+      <p class="muted" style="margin:4px 0 0">El barbero lo copia a sus turnos desde el portal.</p>
+      ${DIAS.map(d => filaDia(d, b.horario[d])).join('')}
+      <div class="acciones"><button class="btn mini sec" id="copiar">Copiar lunes a todos</button></div>
+    </div>
+    <div id="msg" class="err"></div>
+    <button class="btn" id="guardar">${nuevo ? 'Crear barbero' : 'Guardar cambios'}</button>`;
+  const tipo = () => { const a = $('#f-tipo').value === 'Arriendo'; $('#c-pct').classList.toggle('hidden', a); $('#c-arr').classList.toggle('hidden', !a); };
+  $('#f-tipo').onchange = tipo; tipo();
+  $('#volver').onclick = () => vistaLista();
+  $('#salir').onclick = () => salir();
+  document.querySelectorAll('.dia .libre input').forEach(c => c.onchange = () => {
+    const fila = c.closest('.dia');
+    fila.classList.toggle('off', c.checked);
+    fila.querySelectorAll('input[type=time]').forEach(t => t.disabled = c.checked);
+  });
+  $('#copiar').onclick = () => {
+    const lun = document.querySelector('[data-dia="Lun"]');
+    const t = lun.querySelectorAll('input[type=time]'), libre = lun.querySelector('.libre input').checked;
+    document.querySelectorAll('.dia').forEach(f => {
+      if (f === lun || f.dataset.dia === 'Dom') return;
+      const x = f.querySelectorAll('input[type=time]');
+      x[0].value = t[0].value; x[1].value = t[1].value;
+      const c = f.querySelector('.libre input'); c.checked = libre; c.onchange();
+    });
+  };
+  $('#guardar').onclick = async () => {
+    const horario = {};
+    document.querySelectorAll('.dia').forEach(f => {
+      const t = f.querySelectorAll('input[type=time]');
+      horario[f.dataset.dia] = f.querySelector('.libre input').checked ? 'Libre' : t[0].value + '-' + t[1].value;
+    });
+    const btn = $('#guardar'); btn.disabled = true; btn.textContent = 'Guardando…'; $('#msg').textContent = '';
+    try {
+      const r = await api({ a: 'aGuardarBarbero', token: S.token, id: nuevo ? '' : b.id, nombre: $('#f-nombre').value, whatsapp: $('#f-tel').value,
+        tipo: $('#f-tipo').value, pct: $('#f-pct').value, arriendo: $('#f-arr').value, activo: $('#f-activo').checked, horario });
+      if (r.nuevo) vistaCreado(r); else cargar(r.texto);
+    } catch (e) { btn.disabled = false; btn.textContent = nuevo ? 'Crear barbero' : 'Guardar cambios'; $('#msg').textContent = e.message; }
+  };
+}
+
+function vistaCreado(r) {
+  $('#app').innerHTML = `
+    <h2>Barbero creado</h2>
+    <div class="card exito">
+      <b>${esc(r.nombre)}</b> <span class="muted">(${esc(r.id)})</span>
+      <div class="muted" style="margin-top:8px">PIN del portal</div>
+      <div class="grande">${esc(r.pin)}</div>
+      <p class="muted">Entrégale el PIN y el enlace del portal. Ahí sube su foto, dirección, servicios y habilita sus turnos.</p>
+    </div>
+    ${r.whatsapp ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(waLink(r.whatsapp, msgBienvenida(r.nombre, r.pin)))}">Enviarle el acceso por WhatsApp</a>` : ''}
+    <button class="btn sec" id="lista">Volver a la lista</button>`;
+  $('#lista').onclick = () => cargar();
+}
+
+if (S && S.token && S.hasta > Date.now()) cargar(); else vistaLogin();
+</script>
+</body>
+</html>
