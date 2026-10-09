@@ -39,12 +39,12 @@
   .okmsg { color: var(--ok); font-size: 14px; margin-top: 10px; }
   .top { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
   .link { background: none; border: 0; color: var(--sub); text-decoration: underline; cursor: pointer; padding: 6px; }
-  .dias { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+  .dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
   .dias::-webkit-scrollbar { display: none; }
-  .dia { flex: 0 0 auto; width: 66px; text-align: center; background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 7px 4px; cursor: pointer; }
+  .dia { min-width: 0; text-align: center; background: var(--card); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 2px; cursor: pointer; }
   .dia small { display: block; color: var(--sub); font-size: 11px; text-transform: uppercase; }
   .dia b { font-size: 18px; display: block; }
-  .dia i { display: block; font-style: normal; font-size: 11px; margin-top: 2px; }
+  .dia i { display: block; font-style: normal; font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dia.on { border-color: var(--acc); background: #241e10; }
   .dia.cerrado { opacity: .4; }
   .estado-ok { color: var(--ok); } .estado-no { color: var(--err); } .estado-cerr { color: var(--sub); }
@@ -157,7 +157,7 @@ async function cargarSemana(mantener) {
 
 function etiqueta(d) {
   if (!d.tienda) return '<i class="estado-cerr">Cerrado</i>';
-  if (!d.bloques.length) return '<i class="estado-no">Sin turno</i>';
+  if (!d.bloques.length) return '<i class="estado-no">Libre</i>';
   return '<i class="estado-ok">' + d.bloques.length + (d.bloques.length === 1 ? ' turno' : ' turnos') + '</i>';
 }
 
