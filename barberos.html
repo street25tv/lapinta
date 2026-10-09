@@ -64,6 +64,10 @@
   .serv:last-child { border: 0; }
   .serv input { width: 22px; height: 22px; flex: 0 0 22px; accent-color: var(--acc); }
   .mapa { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--acc); text-decoration: none; border: 1px solid #5c4a1c; border-radius: 8px; padding: 5px 10px; }
+  .galeria { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+  .galeria .item { position: relative; aspect-ratio: 4 / 5; border-radius: 10px; overflow: hidden; background: #222; }
+  .galeria img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .borrar { position: absolute; top: 4px; right: 4px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(0,0,0,.7); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -319,6 +323,68 @@ function enlaceMapa() {
   if (href) a.href = href;
 }
 
+let GALP = []; // mis fotos de trabajos
+
+function procesarTrabajo(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const max = 720, k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      let q = 0.8, d = c.toDataURL('image/jpeg', q);
+      while (d.length > 170000 && q > 0.4) { q -= 0.1; d = c.toDataURL('image/jpeg', q); }
+      if (d.length > 175000) return rej(new Error('Esa foto es muy pesada. Prueba con otra.'));
+      res(d);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('No pudimos leer esa imagen. Prueba con una foto JPG o PNG.')); };
+    img.src = url;
+  });
+}
+
+function pintarGaleria() {
+  const g = $('#gal');
+  if (!g) return;
+  g.innerHTML = GALP.map(f => `<div class="item"><img src="${f.src}" alt=""><button class="borrar" data-borrar="${esc(f.id)}" aria-label="Borrar foto">×</button></div>`).join('');
+  $('#gal-vacia').classList.toggle('hidden', GALP.length > 0);
+  $('#gal-cuenta').textContent = '(' + GALP.length + ' de 6)';
+  $('#gal-add').classList.toggle('hidden', GALP.length >= 6);
+  g.querySelectorAll('[data-borrar]').forEach(b => b.onclick = async () => {
+    if (!confirm('¿Borrar esta foto?')) return;
+    b.disabled = true;
+    try {
+      await api({ a: 'bBorrarFoto', token: S.token, id: b.dataset.borrar });
+      GALP = GALP.filter(f => f.id !== b.dataset.borrar);
+      pintarGaleria();
+    } catch (e) { b.disabled = false; $('#gal-msg').className = 'err'; $('#gal-msg').textContent = e.message; }
+  });
+}
+
+async function iniciarGaleria() {
+  $('#gal-msg').className = 'muted'; $('#gal-msg').textContent = 'Cargando tus fotos…';
+  try { GALP = (await api({ a: 'bGaleria', token: S.token })).fotos; $('#gal-msg').textContent = ''; }
+  catch (e) { GALP = []; $('#gal-msg').className = 'err'; $('#gal-msg').textContent = e.message; }
+  pintarGaleria();
+  $('#gal-file').onchange = async e => {
+    const files = Array.from(e.target.files).slice(0, Math.max(0, 6 - GALP.length));
+    e.target.value = '';
+    for (let i = 0; i < files.length; i++) {
+      $('#gal-msg').className = 'muted'; $('#gal-msg').textContent = 'Subiendo foto ' + (i + 1) + ' de ' + files.length + '…';
+      try {
+        const d = await procesarTrabajo(files[i]);
+        const r = await api({ a: 'bSubirFoto', token: S.token, datos: d });
+        GALP.push({ id: r.id, src: d });
+        pintarGaleria();
+      } catch (err) { $('#gal-msg').className = 'err'; $('#gal-msg').textContent = err.message; return; }
+    }
+    $('#gal-msg').className = 'okmsg';
+    $('#gal-msg').textContent = files.length ? 'Listo. Ya se ven en la web.' : 'Ya tienes 6 fotos. Borra una para subir otra.';
+  };
+}
+
 async function vistaPerfil() {
   $('#app').innerHTML = topHtml('perfil') + '<p class="muted" style="text-align:center">Cargando tu perfil…</p>';
   enlacesTop();
@@ -337,6 +403,15 @@ async function vistaPerfil() {
         <button class="btn mini sec" id="pf-quitar">Quitar</button>
       </div>
       <p class="muted">Se muestra en círculo. Usa una imagen cuadrada y clara.</p>
+    </div>
+    <div class="card">
+      <b>Fotos de mis trabajos</b> <span class="muted" id="gal-cuenta"></span>
+      <div class="galeria" id="gal"></div>
+      <p class="muted hidden" id="gal-vacia">Todavía no has subido fotos.</p>
+      <label class="btn mini sec" for="gal-file" id="gal-add" style="margin-top:10px">+ Agregar fotos</label>
+      <input type="file" id="gal-file" accept="image/*" multiple class="hidden">
+      <div id="gal-msg" class="muted"></div>
+      <p class="muted">Se muestran en un carrusel cuando el cliente te elige en la web. Hasta 6 fotos.</p>
     </div>
     <div class="card">
       <label for="pf-dir">Dirección donde atiendes</label>
@@ -365,6 +440,7 @@ async function vistaPerfil() {
     e.target.value = '';
   };
   $('#pf-quitar').onclick = () => { fotoNueva = ''; pintarFoto(); };
+  iniciarGaleria();
   $('#pf-guardar').onclick = async () => {
     const servicios = Array.from(document.querySelectorAll('.serv input:checked')).map(i => i.value);
     const b = $('#pf-guardar'); b.disabled = true; b.textContent = 'Guardando…';
