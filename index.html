@@ -43,7 +43,7 @@
   .opt b { font-weight: 600; }
   .opt .meta { color: var(--sub); font-size: 13px; white-space: nowrap; }
   .opt.on { border-color: var(--acc); background: #241e10; }
-  .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chips::-webkit-scrollbar { display: none; }
   .chip { flex: 0 0 auto; min-width: 64px; text-align: center; background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 8px 10px; cursor: pointer; }
   .chip small { display: block; color: var(--sub); font-size: 11px; text-transform: uppercase; }
