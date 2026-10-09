@@ -85,6 +85,17 @@
   .info a { color: var(--sub); }
   .soporte { position: fixed; right: 16px; bottom: 18px; z-index: 6; background: var(--wa); color: #06210f; border-radius: 30px; padding: 12px 16px; font-weight: 700; text-decoration: none; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
   .cargando { color: var(--sub); padding: 30px 0; text-align: center; }
+  .carrusel { position: relative; margin-top: 10px; }
+  .pista { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 14px; background: var(--card); }
+  .pista::-webkit-scrollbar { display: none; }
+  .pista img { flex: 0 0 100%; width: 100%; aspect-ratio: 4 / 5; max-height: 560px; object-fit: cover; scroll-snap-align: center; display: block; }
+  .pista.vacia { justify-content: center; align-items: center; aspect-ratio: 4 / 5; max-height: 560px; color: var(--sub); font-size: 14px; }
+  .flecha { position: absolute; top: calc(50% - 12px); transform: translateY(-50%); width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 28px; line-height: 1; cursor: pointer; }
+  .flecha.izq { left: 8px; } .flecha.der { right: 8px; }
+  .puntos { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
+  .puntos span { width: 7px; height: 7px; border-radius: 50%; background: #444; }
+  .puntos span.on { background: var(--acc); }
+  .link { background: none; border: 0; color: var(--acc); cursor: pointer; padding: 10px 0 0; font-weight: 600; font-size: 14px; }
   .hidden { display: none !important; }
   @media (prefers-reduced-motion: no-preference) { .vista { animation: entra .18s ease-out; } @keyframes entra { from { opacity: 0; transform: translateY(4px); } } }
 </style>
@@ -191,13 +202,52 @@ async function cargarFotos() {
 
 const mapaBtn = b => b.mapa ? `<a class="mapa" href="${esc(b.mapa)}" target="_blank" rel="noopener" data-mapa>Cómo llegar ↗</a>` : '';
 
+const GAL = {}; // fotos de trabajos por barbero: id -> [{ id, src }] | 'cargando'
+
+function galeriaHtml(b) {
+  const f = GAL[b.id];
+  if (f === undefined) cargarGaleria(b);
+  if (!Array.isArray(f)) return '<div class="pista vacia">Cargando fotos…</div>';
+  if (!f.length) return '';
+  return `<div class="pista" id="pista" tabindex="0" aria-label="Trabajos de ${esc(b.nombre)}">${f.map((x, i) =>
+      `<img src="${x.src}" alt="Trabajo ${i + 1} de ${esc(b.nombre)}"${i ? ' loading="lazy"' : ''}>`).join('')}</div>` +
+    (f.length > 1 ? `<button class="flecha izq" data-dir="-1" aria-label="Foto anterior">‹</button><button class="flecha der" data-dir="1" aria-label="Foto siguiente">›</button>
+      <div class="puntos">${f.map((x, i) => `<span class="${i ? '' : 'on'}"></span>`).join('')}</div>` : '');
+}
+
+async function cargarGaleria(b) {
+  GAL[b.id] = 'cargando';
+  try { const r = await api({ a: 'galeria', b: b.id }); GAL[b.id] = r.fotos.filter(x => /^data:image\//.test(x.src)); }
+  catch (e) { GAL[b.id] = []; }
+  const caja = $('#galeria');
+  if (R.barbero === b.id && caja) {
+    if (GAL[b.id].length) { caja.innerHTML = galeriaHtml(b); iniciarCarrusel(); } else caja.remove();
+  }
+}
+
+function iniciarCarrusel(pos) {
+  const p = $('#pista');
+  if (!p) return;
+  if (pos) p.scrollLeft = pos;
+  const puntos = document.querySelectorAll('.puntos span');
+  const actual = () => Math.round(p.scrollLeft / (p.clientWidth || 1));
+  const marcar = () => puntos.forEach((s, i) => s.classList.toggle('on', i === actual()));
+  p.onscroll = marcar;
+  marcar();
+  document.querySelectorAll('.flecha').forEach(b => b.onclick = () => {
+    const n = p.children.length, i = (actual() + Number(b.dataset.dir) + n) % n;
+    p.scrollTo({ left: i * p.clientWidth, behavior: 'smooth' });
+  });
+}
+
 function vistaReservar() {
   const v = $('#v-reservar');
   const barb = D.barberos.find(b => b.id === R.barbero);
   const servs = barb ? D.servicios.filter(s => (barb.servicios || []).indexOf(s.id) >= 0) : [];
   if (barb && R.servicio && !servs.some(s => s.id === R.servicio)) { R.servicio = null; R.hora = null; }
   const serv = servs.find(s => s.id === R.servicio);
-  let html = '<h2>1 · Barbero</h2><div class="grid">' + D.barberos.map(b => `
+  const lista = barb ? [barb] : D.barberos;
+  let html = '<h2>1 · Barbero</h2><div class="grid">' + lista.map(b => `
     <div class="barb ${b.id === R.barbero ? 'on' : ''}" data-b="${esc(b.id)}" role="button" tabindex="0" aria-pressed="${b.id === R.barbero}">
       ${fotoHtml(b)}
       <div class="datos">
@@ -206,6 +256,7 @@ function vistaReservar() {
         ${mapaBtn(b)}
       </div>
     </div>`).join('') + '</div>';
+  if (barb) html += '<button class="link" id="cambiar">← Ver todos los barberos</button>' + (barb.galeria ? '<div id="galeria" class="carrusel">' + galeriaHtml(barb) + '</div>' : '');
   if (barb) {
     html += '<h2 id="paso2">2 · Servicio</h2>' + (servs.length ? '<div class="grid">' + servs.map(s =>
       `<button class="opt ${s.id === R.servicio ? 'on' : ''}" data-s="${esc(s.id)}"><b>${esc(s.nombre)}</b><span class="meta">${pesos(s.precio)} · ${s.dur} min</span></button>`).join('') + '</div>'
@@ -239,13 +290,16 @@ function vistaReservar() {
       <button class="btn" id="confirmar">Confirmar reserva</button>
       <p class="muted">Pagas en la barbería. ${esc(D.advertencia)}</p>`;
   }
+  const pistaPrev = $('#pista'), posPrev = pistaPrev ? pistaPrev.scrollLeft : 0;
   v.innerHTML = html;
+  iniciarCarrusel(posPrev);
+  if ($('#cambiar')) $('#cambiar').onclick = () => { R.barbero = null; R.servicio = null; R.fecha = null; R.hora = null; vistaReservar(); };
   v.querySelectorAll('[data-b]').forEach(el => {
     const elegir = () => {
       const cambio = R.barbero !== el.dataset.b;
       if (cambio) { R.barbero = el.dataset.b; R.servicio = null; R.fecha = null; R.hora = null; }
       vistaReservar();
-      if (cambio) setTimeout(() => { const p = $('#paso2'); if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+      if (cambio) setTimeout(() => { const p = $('#v-reservar'); if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
     };
     el.onclick = e => { if (!e.target.closest('[data-mapa]')) elegir(); };
     el.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-mapa]')) { e.preventDefault(); elegir(); } };
