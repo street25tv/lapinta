@@ -308,12 +308,14 @@ function vistaCitaForm(c) {
     <div class="top"><button class="link" id="volver">← Volver a la agenda</button><button class="link" id="salir">Salir</button></div>
     <h2>${mover ? 'Mover cita ' + esc(c.id) : 'Nueva cita'}</h2>
     <div class="card">
-      ${mover ? `<b>${esc(c.cliente)}</b><div class="muted">${esc(c.servicio)} · hoy está: ${esc(fechaCorta(c.fecha))}, ${esc(c.hora12)} con ${esc(c.barbero)}</div>` : `
+      ${mover ? `<b>${esc(c.cliente)}</b><div class="muted">${esc(c.servicio)} · hoy está: ${esc(fechaCorta(c.fecha))}, ${esc(c.hora12)} con ${esc(c.barbero)}</div>
+      <label for="c-barb">Barbero</label>
+      <select id="c-barb">${activos.map(b => `<option value="${esc(b.id)}" ${c.barberoId === b.id ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('')}</select>` : `
       <label for="c-nombre">Cliente</label><input id="c-nombre" maxlength="60" placeholder="Nombre y apellido">
       <label for="c-tel">WhatsApp</label><input id="c-tel" type="tel" inputmode="numeric" placeholder="300 123 4567">
-      <label for="c-serv">Servicio</label><select id="c-serv">${g.servicios.map(s => `<option value="${esc(s.id)}">${esc(s.nombre)} · $${s.precio.toLocaleString('es-CO')} · ${s.dur} min</option>`).join('')}</select>`}
       <label for="c-barb">Barbero</label>
-      <select id="c-barb">${mover ? '' : '<option value="*">Cualquiera disponible</option>'}${activos.map(b => `<option value="${esc(b.id)}" ${(mover ? c.barberoId : A.barbero) === b.id ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('')}</select>
+      <select id="c-barb"><option value="*">Cualquiera disponible</option>${activos.map(b => `<option value="${esc(b.id)}" ${(mover ? c.barberoId : A.barbero) === b.id ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('')}</select>
+      <label for="c-serv">Servicio</label><select id="c-serv"></select>`}
       <label for="c-fecha">Día</label><input id="c-fecha" type="date" min="${esc(g.hoy)}" value="${esc(fecha0)}">
       <label for="c-hora">Hora libre</label><select id="c-hora"><option value="">Cargando…</option></select>
       ${mover ? '' : '<label for="c-notas">Notas (opcional)</label><input id="c-notas" maxlength="200">'}
@@ -323,6 +325,14 @@ function vistaCitaForm(c) {
   $('#volver').onclick = () => vistaAgenda();
   $('#salir').onclick = () => salir();
   const servicio = () => (mover ? c.servicioId : $('#c-serv').value);
+  const opcionesServ = () => {
+    if (mover) return;
+    const bid = $('#c-barb').value, antes = $('#c-serv').value;
+    const barb = g.barberos.find(b => b.id === bid);
+    const lista = barb ? g.servicios.filter(s => barb.servicios.indexOf(s.id) >= 0) : g.servicios;
+    $('#c-serv').innerHTML = lista.map(s => `<option value="${esc(s.id)}" ${s.id === antes ? 'selected' : ''}>${esc(s.nombre)}${!barb && s.dueno ? ' (' + esc(s.dueno) + ')' : ''} · $${s.precio.toLocaleString('es-CO')} · ${s.dur} min</option>`).join('') || '<option value="">Sin servicios</option>';
+  };
+  opcionesServ();
   let pedido = 0;
   const horas = async () => {
     const sel = $('#c-hora'), n = ++pedido;
@@ -335,7 +345,7 @@ function vistaCitaForm(c) {
         : '<option value="">No hay horas libres ese día</option>';
     } catch (e) { if (n === pedido) sel.innerHTML = '<option value="">' + esc(e.message) + '</option>'; }
   };
-  ['#c-barb', '#c-fecha'].concat(mover ? [] : ['#c-serv']).forEach(s => $(s).onchange = horas);
+  ['#c-barb', '#c-fecha'].concat(mover ? [] : ['#c-serv']).forEach(s => $(s).onchange = () => { if (s === '#c-barb') opcionesServ(); horas(); });
   horas();
   $('#guardar').onclick = async () => {
     const hora = $('#c-hora').value;
