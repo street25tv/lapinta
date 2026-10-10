@@ -185,7 +185,7 @@ async function cargarSemana(mantener) {
 }
 
 function etiqueta(d) {
-  if (!d.tienda) return '<i class="estado-cerr">Cerrado</i>';
+  if (!d.tienda && !d.bloques.length) return '<i class="estado-cerr">Cerrado</i>';
   if (!d.bloques.length) return '<i class="estado-no">Libre</i>';
   return '<i class="estado-ok">' + d.bloques.length + (d.bloques.length === 1 ? ' turno' : ' turnos') + '</i>';
 }
@@ -198,9 +198,9 @@ function elegir(fecha) {
 }
 
 function opcionesHora(d, valor) {
-  const [a, b] = d.tienda.split('-').map(aMin);
-  let html = '';
-  for (let t = a; t <= b; t += W.paso) html += `<option value="${aHora(t)}" ${aHora(t) === valor ? 'selected' : ''}>${h12(aHora(t))}</option>`;
+  let html = '', hay = false;
+  for (let t = 0; t < 1440; t += W.paso) { const h = aHora(t); if (h === valor) hay = true; html += `<option value="${h}" ${h === valor ? 'selected' : ''}>${h12(h)}</option>`; }
+  if (valor && !hay) html = `<option value="${valor}" selected>${h12(valor)}</option>` + html;
   return html;
 }
 
@@ -218,12 +218,11 @@ function pintar(msg, tipo) {
         <small>${i === 0 ? 'Hoy' : i === 1 ? 'Mañ' : DIAS[f.getDay()]}</small><b>${f.getDate()}</b><small>${MESES[f.getMonth()]}</small>${etiqueta(x)}</button>`;
     }).join('')}</div>
     <h2>${esc(d.txt)}</h2>`;
-  if (!d.tienda) {
-    html += '<div class="card muted">La barbería está cerrada este día.</div>';
-  } else {
-    html += `<div class="muted">La barbería abre ${esc(d.tienda.replace('-', ' a '))}.${d.base ? ' Tu horario base: ' + esc(d.base.replace('-', ' a ')) + '.' : ''}</div>
+  {
+    html += `<div class="muted">${d.tienda ? 'La barbería abre ' + esc(d.tienda.replace('-', ' a ')) + '.' : 'La barbería está cerrada este día; si atiendes, habilita tus turnos.'}${d.base ? ' Tu horario base: ' + esc(d.base.replace('-', ' a ')) + '.' : ''}</div>
       <div class="card">
         <b>Tus turnos</b>
+        <p class="muted" style="margin:4px 0 0">Cambia las horas, quita un turno con × o agrega otro, y toca Guardar.</p>
         ${edit.length ? edit.map((b, i) => `
           <div class="bloque">
             <select data-i="${i}" data-k="0" aria-label="Inicio del turno ${i + 1}">${opcionesHora(d, b[0])}</select>
@@ -268,27 +267,30 @@ function pintar(msg, tipo) {
     try { const r = await api({ a: 'bCopiarBase', token: S.token }); await cargarSemana(true); pintar(r.texto, 'ok'); }
     catch (e) { b.disabled = false; b.textContent = 'Usar mi horario base en los próximos 7 días'; alert(e.message); }
   };
-  if (!d.tienda) return;
-  const [ta, tb] = d.tienda.split('-');
+  const rt = String(d.tienda || d.base || '09:00-19:00').match(/\d{1,2}:\d{2}/g).map(h => h.padStart(5, '0'));
+  const ta = rt[0], tb = rt[1] || '19:00';
   document.querySelectorAll('.bloque select').forEach(s => s.onchange = () => { edit[+s.dataset.i][+s.dataset.k] = s.value; });
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { edit.splice(+b.dataset.del, 1); pintar(); });
   $('#agregar').onclick = () => {
     const ult = edit.length ? aMin(edit[edit.length - 1][1]) : aMin(ta);
-    const ini = Math.min(ult + (edit.length ? 60 : 0), aMin(tb) - W.paso);
-    edit.push([aHora(ini), aHora(Math.min(ini + 240, aMin(tb)))]);
+    const tope = edit.length ? 1440 - W.paso : aMin(tb);
+    const ini = Math.min(ult + (edit.length ? 60 : 0), tope - W.paso);
+    edit.push([aHora(ini), aHora(Math.min(ini + 240, tope))]);
     pintar();
   };
   $('#todo').onclick = () => { edit = [[ta, tb]]; pintar(); };
   if ($('#usarBase')) $('#usarBase').onclick = () => {
     const [ba, bb] = d.base.split('-').map(aMin);
-    edit = [[aHora(Math.max(ba, aMin(ta))), aHora(Math.min(bb, aMin(tb)))]];
+    edit = [[aHora(ba), aHora(bb)]];
     pintar();
   };
   $('#libre').onclick = () => { edit = []; pintar(); };
   $('#guardar').onclick = async () => {
     const b = $('#guardar'); b.disabled = true; b.textContent = 'Guardando…'; $('#msg').textContent = '';
     try {
-      const r = await api({ a: 'bGuardarDia', token: S.token, fecha: sel, bloques: edit });
+      let r;
+      try { r = await api({ a: 'bGuardarDia', token: S.token, fecha: sel, bloques: edit }); }
+      catch (e) { if (!/citas fuera/.test(e.message) || !confirm(e.message + '\n\n¿Guardar de todas formas?')) throw e; r = await api({ a: 'bGuardarDia', token: S.token, fecha: sel, bloques: edit, forzar: true }); }
       await cargarSemana(true);
       pintar(r.texto, 'ok');
     } catch (e) { b.disabled = false; b.textContent = 'Guardar'; $('#msg').className = 'err'; $('#msg').textContent = e.message; }
