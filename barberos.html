@@ -245,7 +245,7 @@ function pintar(msg, tipo) {
       const pend = c.anticipo > 0 && (c.anticipoEstado === 'Pendiente' || !c.anticipoEstado);
       return `<div class="cita-box"><div class="cita"><span>${h12(c.hora)} · ${esc(c.cliente)}</span><span class="muted">${esc(c.servicio)}${c.estado === 'Pendiente' ? ' · pendiente' : ''}</span></div>
         ${c.anticipo > 0 ? `<span class="ant ${c.anticipoEstado === 'Recibido' ? 'ok' : ''}">Anticipo ${pesosB(c.anticipo)} · ${c.anticipoEstado === 'Recibido' ? 'recibido' : pend ? 'por pagar' : esc(c.anticipoEstado.toLowerCase())}</span>` : ''}
-        ${c.id && (pend || !(c.anticipo > 0)) ? `<button class="link" data-ant="${esc(c.id)}">${pend ? 'Recibí el anticipo' : 'Registrar anticipo'}</button>` : ''}
+        ${c.id && (pend || !(c.anticipo > 0)) ? `<div style="margin-top:6px"><button class="btn mini ${pend ? '' : 'sec'}" data-ant="${esc(c.id)}">${pend ? '✓ Recibí el anticipo' : '+ Registrar anticipo'}</button></div>` : ''}
       </div>`; }).join('') + '<div id="ant-msg"></div>'
       : '<p class="muted">Sin citas todavía.</p>'}</div>`;
   $('#app').innerHTML = html;
