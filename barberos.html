@@ -78,6 +78,9 @@
   .grande-g { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 44px; letter-spacing: 1px; color: var(--acc); line-height: 1.1; }
   .lineas > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
   .lineas > div:last-child { border: 0; } .lineas > div span { color: var(--sub); }
+  .btn.peligro { background: #2a1414; color: var(--err); }
+  .rep label { font-size: 12px; margin: 0 0 4px; display: block; color: var(--sub); }
+  .rep input, .rep select { padding: 9px; }
   .hidden { display: none !important; }
   .ant { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 20px; background: #2b2410; color: var(--acc); white-space: nowrap; }
   .ant.ok { background: #10261a; color: var(--ok); }
@@ -245,6 +248,7 @@ function pintar(msg, tipo) {
       return `<div class="cita-box"><div class="cita"><span>${h12(c.hora)} · ${esc(c.cliente)}</span><span class="muted">${esc(c.servicio)}${c.estado === 'Pendiente' ? ' · pendiente' : ''}</span></div>
         ${c.anticipo > 0 ? `<span class="ant ${c.anticipoEstado === 'Recibido' ? 'ok' : ''}">Anticipo ${pesosB(c.anticipo)} · ${c.anticipoEstado === 'Recibido' ? 'recibido' : pend ? 'por pagar' : esc(c.anticipoEstado.toLowerCase())}</span>` : ''}
         ${c.id && (pend || !(c.anticipo > 0)) ? `<div style="margin-top:6px"><button class="btn mini ${pend ? '' : 'sec'}" data-ant="${esc(c.id)}">${pend ? '✓ Recibí el anticipo' : '+ Registrar anticipo'}</button></div>` : ''}
+        ${citaAcciones(c, d)}
       </div>`; }).join('') + '<div id="ant-msg"></div>'
       : '<p class="muted">Sin citas todavía.</p>'}</div>`;
   $('#app').innerHTML = html;
@@ -262,6 +266,7 @@ function pintar(msg, tipo) {
       $('#ant-msg').innerHTML = `<div class="okmsg">${esc(r.texto)}</div>${r.wa ? `<a class="wa" target="_blank" rel="noopener" href="${esc(r.wa)}">Avisar al cliente por WhatsApp</a>` : ''}`;
     } catch (e) { b.disabled = false; alert(e.message); }
   });
+  enlacesCitas(d);
   if ($('#base')) $('#base').onclick = async () => {
     const b = $('#base'); b.disabled = true; b.textContent = 'Habilitando…';
     try { const r = await api({ a: 'bCopiarBase', token: S.token }); await cargarSemana(true); pintar(r.texto, 'ok'); }
@@ -295,6 +300,62 @@ function pintar(msg, tipo) {
       pintar(r.texto, 'ok');
     } catch (e) { b.disabled = false; b.textContent = 'Guardar'; $('#msg').className = 'err'; $('#msg').textContent = e.message; }
   };
+}
+
+/* ---------- Citas: confirmar, reprogramar, cancelar ---------- */
+function citaAcciones(c, d) {
+  if (!c.id) return '';
+  const hoy = W.dias[0].fecha;
+  const b = [];
+  if (c.estado === 'Pendiente') b.push(`<button class="btn mini" data-cacc="Confirmada" data-cid="${esc(c.id)}">Confirmar</button>`);
+  b.push(`<button class="btn mini sec" data-crep="${esc(c.id)}">Reprogramar</button>`);
+  if (c.estado === 'Confirmada' && d.fecha <= hoy) b.push(`<button class="btn mini sec" data-cacc="No asistió" data-cid="${esc(c.id)}">No asistió</button>`);
+  b.push(`<button class="btn mini peligro" data-cacc="Cancelada" data-cid="${esc(c.id)}">${c.estado === 'Pendiente' ? 'Rechazar' : 'Cancelar'}</button>`);
+  return `<div class="acciones" style="margin-top:6px">${b.join('')}</div><div class="rep" data-repbox="${esc(c.id)}"></div>`;
+}
+
+function avisoCita(r) {
+  if (!$('#ant-msg')) { const x = document.createElement('div'); x.id = 'ant-msg'; x.className = 'card'; $('#app').appendChild(x); }
+  $('#ant-msg').innerHTML = `<div class="okmsg">${esc(r.texto)}</div>${r.wa ? `<a class="wa" target="_blank" rel="noopener" href="${esc(r.wa)}">Avisar al cliente por WhatsApp</a>` : ''}`;
+  $('#ant-msg').scrollIntoView({ block: 'center' });
+}
+
+function enlacesCitas(d) {
+  document.querySelectorAll('[data-cacc]').forEach(b => b.onclick = async () => {
+    const c = d.citas.find(x => x.id === b.dataset.cid), acc = b.dataset.cacc;
+    const q = { 'Cancelada': '¿' + (c.estado === 'Pendiente' ? 'Rechazar' : 'Cancelar') + ' la cita de ' + c.cliente + ' a las ' + h12(c.hora) + '?', 'No asistió': '¿Marcar que ' + c.cliente + ' no vino?' }[acc];
+    if (q && !confirm(q)) return;
+    b.disabled = true;
+    try { const r = await api({ a: 'bEstadoCita', token: S.token, cita: c.id, estado: acc }); await cargarSemana(true); avisoCita(r); }
+    catch (e) { b.disabled = false; alert(e.message); }
+  });
+  document.querySelectorAll('[data-crep]').forEach(b => b.onclick = () => {
+    const c = d.citas.find(x => x.id === b.dataset.crep);
+    const caja = document.querySelector(`[data-repbox="${c.id}"]`);
+    if (caja.innerHTML) { caja.innerHTML = ''; return; }
+    const hoy = W.dias[0].fecha, max = W.dias[W.dias.length - 1].fecha;
+    caja.innerHTML = `<div class="fila2" style="margin-top:8px">
+        <div><label>Nuevo día</label><input type="date" class="rp-f" min="${hoy}" max="${max}" value="${d.fecha}"></div>
+        <div><label>Nueva hora</label><select class="rp-h"><option value="">Cargando…</option></select></div></div>
+      <button class="btn mini rp-ok" style="margin-top:8px">Guardar cambio</button> <span class="muted rp-msg"></span>`;
+    const f = caja.querySelector('.rp-f'), h = caja.querySelector('.rp-h');
+    let n = 0;
+    const cargar = async () => {
+      const k = ++n; h.innerHTML = '<option value="">Cargando…</option>';
+      try {
+        const r = await api({ a: 'bLibres', token: S.token, cita: c.id, fecha: f.value });
+        if (k !== n) return;
+        h.innerHTML = r.libres.length ? r.libres.map(s => `<option value="${s.hora}" ${s.hora === c.hora ? 'selected' : ''}>${h12(s.hora)}</option>`).join('') : '<option value="">Sin horas libres ese día</option>';
+      } catch (e) { if (k === n) h.innerHTML = '<option value="">' + esc(e.message) + '</option>'; }
+    };
+    f.onchange = cargar; cargar();
+    caja.querySelector('.rp-ok').onclick = async e => {
+      if (!h.value) { caja.querySelector('.rp-msg').textContent = 'Elige una hora libre. Si no hay, agrega un turno ese día.'; return; }
+      e.target.disabled = true;
+      try { const r = await api({ a: 'bMoverCita', token: S.token, cita: c.id, fecha: f.value, hora: h.value }); await cargarSemana(true); avisoCita(r); }
+      catch (x) { e.target.disabled = false; caja.querySelector('.rp-msg').textContent = x.message; }
+    };
+  });
 }
 
 /* ---------- Mis servicios ---------- */
