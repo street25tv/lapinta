@@ -57,6 +57,17 @@
   .switch input { width: 22px; height: 22px; accent-color: var(--acc); }
   .exito { border-color: #1f6b43; background: #10261a; }
   .grande { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 40px; letter-spacing: 3px; color: var(--acc); }
+  .tabs { display: flex; gap: 6px; }
+  .tab { background: var(--card2); border: 0; border-radius: 20px; padding: 8px 16px; font-weight: 600; cursor: pointer; color: var(--sub); }
+  .tab.on { background: var(--acc); color: var(--acc-txt); }
+  .tag.pend { background: #2b2410; color: var(--acc); } .tag.at { background: #13233a; color: #7fb2ff; } .tag.na { background: #262626; color: var(--sub); }
+  .cita { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
+  .cita-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .pend-card { border-color: #5a4515; }
+  .dias-nav { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+  .dias-nav input { flex: 1; min-width: 0; padding: 9px; }
+  .bloque { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 6px; align-items: center; margin-top: 8px; }
+  .bloque input { padding: 9px 6px; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -119,7 +130,7 @@ function vistaLogin(msg) {
       const r = await api({ a: 'aLogin', clave: $('#clave').value });
       S = { token: r.token, hasta: Date.now() + 5.5 * 3600 * 1000 };
       ls.set('sesionAdmin', S);
-      cargar();
+      cargarAgenda();
     } catch (e) { b.disabled = false; $('#err').textContent = e.message; }
   };
   $('#entrar').onclick = entrar;
@@ -138,7 +149,8 @@ async function cargar(msg) {
 function vistaLista(msg) {
   const activos = L.filter(b => b.activo).length;
   $('#app').innerHTML = `
-    <div class="top"><div class="muted">${L.length} barberos · ${activos} activos</div><button class="link" id="salir">Salir</button></div>
+    ${nav('barberos')}
+    <div class="muted" style="margin-top:10px">${L.length} barberos · ${activos} activos</div>
     <button class="btn" id="nuevo">+ Nuevo barbero</button>
     ${msg ? `<div class="okmsg">${esc(msg)}</div>` : ''}
     <h2>Barberos</h2>
@@ -155,7 +167,7 @@ function vistaLista(msg) {
           <button class="btn mini peligro" data-eliminar="${esc(b.id)}">Eliminar</button>
         </div>
       </div>`).join('') || '<p class="muted">Todavía no hay barberos.</p>'}`;
-  $('#salir').onclick = () => salir();
+  bindNav();
   $('#nuevo').onclick = () => vistaForm(null);
   document.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => {
     const x = L.find(y => y.id === b.dataset.ver), el = document.querySelector(`[data-pin="${b.dataset.ver}"]`);
@@ -181,6 +193,228 @@ function vistaLista(msg) {
     try { const r = await api({ a: 'aEliminarBarbero', token: S.token, id: x.id }); cargar(r.texto); }
     catch (e) { b.disabled = false; b.textContent = 'Eliminar'; alert(e.message); }
   });
+}
+
+/* ---------- Pestañas ---------- */
+function nav(activa) {
+  return `<div class="top"><div class="tabs">
+      <button class="tab ${activa === 'agenda' ? 'on' : ''}" data-nav="agenda">Agenda</button>
+      <button class="tab ${activa === 'barberos' ? 'on' : ''}" data-nav="barberos">Barberos</button>
+    </div><button class="link" id="salir">Salir</button></div>`;
+}
+function bindNav() {
+  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => (b.dataset.nav === 'agenda' ? cargarAgenda() : cargar()));
+  if ($('#salir')) $('#salir').onclick = () => salir();
+}
+
+/* ---------- Agenda ---------- */
+let A = { fecha: '', barbero: '*' };
+let AG = null;
+const ESTADO_CLASE = { 'Pendiente': 'pend', 'Confirmada': 'si', 'Cancelada': 'no', 'Atendida': 'at', 'No asistió': 'na' };
+const sumarDia = (f, n) => { const d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const fechaCorta = f => { const d = new Date(f + 'T12:00:00'); return ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][d.getDay()] + ' ' + d.getDate() + ' ' + ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][d.getMonth()]; };
+const h12 = h => { const [a, m] = String(h).split(':').map(Number); return ((a % 12) || 12) + ':' + String(m).padStart(2, '0') + (a < 12 ? ' a. m.' : ' p. m.'); };
+
+function avisoHtml(msg, wa) {
+  return (msg ? `<div class="okmsg">${esc(msg)}</div>` : '') +
+    (wa ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(wa)}">Avisar al cliente por WhatsApp</a>` : '');
+}
+
+async function cargarAgenda(msg, wa) {
+  $('#app').innerHTML = nav('agenda') + '<p class="muted" style="text-align:center;margin-top:24px">Cargando agenda…</p>';
+  bindNav();
+  try { AG = await api({ a: 'aAgenda', token: S.token, fecha: A.fecha || '' }); A.fecha = AG.fecha; vistaAgenda(msg, wa); }
+  catch (e) { if (S) { $('#app').innerHTML = nav('agenda') + `<div class="err">${esc(e.message)}</div><button class="btn sec" id="re">Reintentar</button>`; bindNav(); $('#re').onclick = () => cargarAgenda(); } }
+}
+
+function botonesCita(c) {
+  const b = [];
+  if (c.estado === 'Pendiente') b.push(`<button class="btn mini" data-acc="Confirmada" data-cita="${esc(c.id)}">Confirmar</button>`,
+    `<button class="btn mini peligro" data-acc="Cancelada" data-cita="${esc(c.id)}">Rechazar</button>`);
+  if (c.estado === 'Pendiente' || c.estado === 'Confirmada') b.push(`<button class="btn mini sec" data-mover="${esc(c.id)}">Mover</button>`);
+  if (c.estado === 'Confirmada') b.push(`<button class="btn mini sec" data-acc="No asistió" data-cita="${esc(c.id)}">No asistió</button>`,
+    `<button class="btn mini peligro" data-acc="Cancelada" data-cita="${esc(c.id)}">Cancelar</button>`);
+  if (c.estado === 'Cancelada' || c.estado === 'No asistió') b.push(`<button class="btn mini sec" data-acc="Confirmada" data-cita="${esc(c.id)}">Reactivar</button>`);
+  if (c.tel) b.push(`<a class="btn mini sec" target="_blank" rel="noopener" href="${esc(waLink(c.tel, 'Hola ' + c.cliente.split(' ')[0] + ', '))}">WhatsApp</a>`);
+  return b.join('');
+}
+
+function filaCita(c, conFecha) {
+  return `<div class="cita">
+    <div class="cita-top"><b>${conFecha ? esc(fechaCorta(c.fecha)) + ' · ' : ''}${esc(c.hora12)}</b><span class="tag ${ESTADO_CLASE[c.estado] || ''}">${esc(c.estado)}</span></div>
+    <div>${esc(c.cliente)} <span class="muted">· ${esc(c.servicio)}${conFecha ? ' · ' + esc(c.barbero) : ''}</span></div>
+    ${c.notas ? `<div class="muted">${esc(c.notas)}</div>` : ''}
+    <div class="acciones">${botonesCita(c)}</div>
+  </div>`;
+}
+
+function vistaAgenda(msg, wa) {
+  const g = AG;
+  const visibles = g.barberos.filter(b => (A.barbero === '*' || b.id === A.barbero) && (b.activo || g.citas.some(c => c.barberoId === b.id)));
+  const ids = g.barberos.map(b => b.id);
+  const huerfanas = g.citas.filter(c => ids.indexOf(c.barberoId) < 0);
+  const activas = g.citas.filter(c => c.estado === 'Pendiente' || c.estado === 'Confirmada').length;
+  $('#app').innerHTML = nav('agenda') + avisoHtml(msg, wa) + `
+    <button class="btn" id="nueva">+ Nueva cita</button>
+    ${g.pendientes.length ? `<div class="card pend-card"><b>Por confirmar (${g.pendientes.length})</b>${g.pendientes.map(c => filaCita(c, true)).join('')}</div>` : ''}
+    <div class="dias-nav">
+      <button class="btn mini sec" id="ant" aria-label="Día anterior">‹</button>
+      <input type="date" id="f-dia" value="${esc(g.fecha)}">
+      <button class="btn mini sec" id="sig" aria-label="Día siguiente">›</button>
+      ${g.fecha !== g.hoy ? '<button class="btn mini sec" id="hoy">Hoy</button>' : ''}
+    </div>
+    <h2>${esc(g.fechaTxt)}</h2>
+    <div class="muted">${g.tienda ? 'Barbería abierta ' + esc(g.tienda) : 'La barbería está cerrada este día'} · ${activas} ${activas === 1 ? 'cita activa' : 'citas activas'}</div>
+    <label for="f-barb">Barbero</label>
+    <select id="f-barb"><option value="*">Todos</option>${g.barberos.map(b => `<option value="${esc(b.id)}" ${A.barbero === b.id ? 'selected' : ''}>${esc(b.nombre)}${b.activo ? '' : ' (inactivo)'}</option>`).join('')}</select>
+    ${visibles.map(b => {
+      const mias = g.citas.filter(c => c.barberoId === b.id);
+      return `<div class="card">
+        <div class="barb"><div><b>${esc(b.nombre)}</b>${b.activo ? '' : '<span class="tag no">Inactivo</span>'}
+          <div class="muted">${b.turnos.length ? 'Turnos: ' + b.turnos.map(t => esc(h12(t[0]) + ' – ' + h12(t[1]))).join(', ') : 'Sin turnos habilitados este día'}</div></div>
+          <button class="btn mini sec" data-turnos="${esc(b.id)}">Turnos</button></div>
+        ${mias.length ? mias.map(c => filaCita(c, false)).join('') : '<p class="muted" style="margin:10px 0 0">Sin citas.</p>'}
+      </div>`;
+    }).join('') || '<p class="muted">No hay barberos activos.</p>'}
+    ${huerfanas.length ? `<div class="card"><b>Otras citas</b><div class="muted">De barberos que ya no están en la lista.</div>${huerfanas.map(c => filaCita(c, false)).join('')}</div>` : ''}`;
+  bindNav();
+  const ir = f => { A.fecha = f; cargarAgenda(); };
+  $('#ant').onclick = () => ir(sumarDia(g.fecha, -1));
+  $('#sig').onclick = () => ir(sumarDia(g.fecha, 1));
+  if ($('#hoy')) $('#hoy').onclick = () => ir(g.hoy);
+  $('#f-dia').onchange = e => { if (e.target.value) ir(e.target.value); };
+  $('#f-barb').onchange = e => { A.barbero = e.target.value; vistaAgenda(); };
+  $('#nueva').onclick = () => vistaCitaForm(null);
+  document.querySelectorAll('[data-turnos]').forEach(b => b.onclick = () => cargarTurnos(b.dataset.turnos));
+  const todas = g.citas.concat(g.pendientes);
+  document.querySelectorAll('[data-mover]').forEach(b => b.onclick = () => vistaCitaForm(todas.find(c => c.id === b.dataset.mover)));
+  document.querySelectorAll('[data-acc]').forEach(b => b.onclick = async () => {
+    const c = todas.find(x => x.id === b.dataset.cita), acc = b.dataset.acc;
+    const pregunta = { 'Cancelada': '¿' + (c.estado === 'Pendiente' ? 'Rechazar' : 'Cancelar') + ' la cita de ' + c.cliente + ' (' + fechaCorta(c.fecha) + ', ' + c.hora12 + ')?',
+      'No asistió': '¿Marcar que ' + c.cliente + ' no asistió?' }[acc];
+    if (pregunta && !confirm(pregunta)) return;
+    b.disabled = true;
+    try { const r = await api({ a: 'aEstadoCita', token: S.token, cita: c.id, estado: acc }); cargarAgenda(r.texto, r.wa); }
+    catch (e) { b.disabled = false; alert(e.message); }
+  });
+}
+
+/* Crear (c = null) o mover (c = la cita) */
+function vistaCitaForm(c) {
+  const g = AG, mover = !!c;
+  const activos = g.barberos.filter(b => b.activo);
+  const fecha0 = mover ? (c.fecha < g.hoy ? g.hoy : c.fecha) : (g.fecha < g.hoy ? g.hoy : g.fecha);
+  $('#app').innerHTML = `
+    <div class="top"><button class="link" id="volver">← Volver a la agenda</button><button class="link" id="salir">Salir</button></div>
+    <h2>${mover ? 'Mover cita ' + esc(c.id) : 'Nueva cita'}</h2>
+    <div class="card">
+      ${mover ? `<b>${esc(c.cliente)}</b><div class="muted">${esc(c.servicio)} · hoy está: ${esc(fechaCorta(c.fecha))}, ${esc(c.hora12)} con ${esc(c.barbero)}</div>` : `
+      <label for="c-nombre">Cliente</label><input id="c-nombre" maxlength="60" placeholder="Nombre y apellido">
+      <label for="c-tel">WhatsApp</label><input id="c-tel" type="tel" inputmode="numeric" placeholder="300 123 4567">
+      <label for="c-serv">Servicio</label><select id="c-serv">${g.servicios.map(s => `<option value="${esc(s.id)}">${esc(s.nombre)} · $${s.precio.toLocaleString('es-CO')} · ${s.dur} min</option>`).join('')}</select>`}
+      <label for="c-barb">Barbero</label>
+      <select id="c-barb">${mover ? '' : '<option value="*">Cualquiera disponible</option>'}${activos.map(b => `<option value="${esc(b.id)}" ${(mover ? c.barberoId : A.barbero) === b.id ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('')}</select>
+      <label for="c-fecha">Día</label><input id="c-fecha" type="date" min="${esc(g.hoy)}" value="${esc(fecha0)}">
+      <label for="c-hora">Hora libre</label><select id="c-hora"><option value="">Cargando…</option></select>
+      ${mover ? '' : '<label for="c-notas">Notas (opcional)</label><input id="c-notas" maxlength="200">'}
+    </div>
+    <div id="msg" class="err"></div>
+    <button class="btn" id="guardar">${mover ? 'Mover cita' : 'Guardar cita'}</button>`;
+  $('#volver').onclick = () => vistaAgenda();
+  $('#salir').onclick = () => salir();
+  const servicio = () => (mover ? c.servicioId : $('#c-serv').value);
+  let pedido = 0;
+  const horas = async () => {
+    const sel = $('#c-hora'), n = ++pedido;
+    sel.innerHTML = '<option value="">Cargando…</option>';
+    try {
+      const r = await api({ a: 'aLibres', token: S.token, fecha: $('#c-fecha').value, barbero: $('#c-barb').value, servicio: servicio(), excluir: mover ? c.id : '' });
+      if (n !== pedido) return;
+      const todos = $('#c-barb').value === '*';
+      sel.innerHTML = r.libres.length ? r.libres.map(s => `<option value="${esc(s.hora)}">${esc(s.hora12)}${todos ? ' · ' + esc(s.barberos.map(b => b.nombre).join(', ')) : ''}</option>`).join('')
+        : '<option value="">No hay horas libres ese día</option>';
+    } catch (e) { if (n === pedido) sel.innerHTML = '<option value="">' + esc(e.message) + '</option>'; }
+  };
+  ['#c-barb', '#c-fecha'].concat(mover ? [] : ['#c-serv']).forEach(s => $(s).onchange = horas);
+  horas();
+  $('#guardar').onclick = async () => {
+    const hora = $('#c-hora').value;
+    if (!hora) { $('#msg').textContent = 'Elige una hora libre.'; return; }
+    const btn = $('#guardar'); btn.disabled = true; $('#msg').textContent = '';
+    try {
+      const r = mover
+        ? await api({ a: 'aMoverCita', token: S.token, cita: c.id, fecha: $('#c-fecha').value, hora: hora, barbero: $('#c-barb').value })
+        : await api({ a: 'aCrearCita', token: S.token, nombre: $('#c-nombre').value, tel: $('#c-tel').value, servicio: $('#c-serv').value,
+            barbero: $('#c-barb').value, fecha: $('#c-fecha').value, hora: hora, notas: $('#c-notas').value });
+      A.fecha = $('#c-fecha').value;
+      cargarAgenda(r.texto, r.wa);
+    } catch (e) { btn.disabled = false; $('#msg').textContent = e.message; }
+  };
+}
+
+/* ---------- Turnos de un barbero ---------- */
+let T = null;
+async function cargarTurnos(id, msg) {
+  $('#app').innerHTML = '<p class="muted" style="text-align:center;margin-top:24px">Cargando turnos…</p>';
+  try { T = await api({ a: 'aTurnos', token: S.token, barbero: id }); vistaTurnos(msg); }
+  catch (e) { cargarAgenda(); alert(e.message); }
+}
+
+function vistaTurnos(msg) {
+  $('#app').innerHTML = `
+    <div class="top"><button class="link" id="volver">← Volver a la agenda</button><button class="link" id="salir">Salir</button></div>
+    <h2>Turnos de ${esc(T.nombre)}</h2>
+    <p class="muted">Solo se reservan las horas que estén dentro de un turno.</p>
+    ${msg ? `<div class="okmsg">${esc(msg)}</div>` : ''}
+    <button class="btn sec" id="base">Copiar su horario base a los próximos 7 días</button>
+    ${T.dias.map((d, i) => `<div class="card dia-t" data-i="${i}">
+      <div class="barb"><div><b>${esc(fechaCorta(d.fecha))}</b>
+        <div class="muted">${!d.tienda ? 'Barbería cerrada' : d.bloques.length ? d.bloques.map(r => esc(h12(r[0]) + ' – ' + h12(r[1]))).join(', ') : 'Libre (sin turnos)'}${d.citas.length ? ' · ' + d.citas.length + (d.citas.length === 1 ? ' cita' : ' citas') : ''}</div></div>
+        ${d.tienda ? `<button class="btn mini sec" data-editar-dia="${i}">Editar</button>` : ''}</div>
+      <div class="editor"></div>
+    </div>`).join('')}`;
+  $('#volver').onclick = () => cargarAgenda();
+  $('#salir').onclick = () => salir();
+  $('#base').onclick = async () => {
+    const b = $('#base'); b.disabled = true;
+    try { const r = await api({ a: 'aCopiarBase', token: S.token, barbero: T.id }); cargarTurnos(T.id, r.texto); }
+    catch (e) { b.disabled = false; alert(e.message); }
+  };
+  document.querySelectorAll('[data-editar-dia]').forEach(b => b.onclick = () => editorDia(Number(b.dataset.editarDia)));
+}
+
+function editorDia(i) {
+  const d = T.dias[i];
+  const caja = document.querySelector(`.dia-t[data-i="${i}"] .editor`);
+  const hs = (String(d.tienda).match(/\d{1,2}:\d{2}/g) || ['09:00', '19:00']).map(h => h.padStart(5, '0'));
+  const ta = hs[0], tb = hs[1] || hs[0];
+  let bloques = d.bloques.map(r => r.map(h => String(h).padStart(5, '0')));
+  const pintar = () => {
+    caja.innerHTML = `
+      <div class="muted" style="margin-top:8px">La barbería abre ${esc(h12(ta))} – ${esc(h12(tb))}.</div>
+      ${bloques.map((r, k) => `<div class="bloque"><input type="time" step="900" value="${esc(r[0])}" data-k="${k}" data-p="0">
+        <span class="muted">a</span><input type="time" step="900" value="${esc(r[1])}" data-k="${k}" data-p="1">
+        <button class="btn mini sec" data-quitar="${k}" aria-label="Quitar turno">✕</button></div>`).join('') || '<p class="muted">Día libre: no recibe citas.</p>'}
+      <div class="acciones">
+        <button class="btn mini sec" data-x="agregar">+ Agregar turno</button>
+        <button class="btn mini sec" data-x="todo">Todo el día</button>
+        <button class="btn mini sec" data-x="libre">Día libre</button>
+      </div>
+      ${d.citas.length ? `<div class="muted" style="margin-top:10px">Citas: ${d.citas.map(c => esc(h12(c.hora) + ' ' + c.cliente)).join(', ')}</div>` : ''}
+      <div class="err"></div>
+      <button class="btn" data-x="guardar">Guardar ${esc(fechaCorta(d.fecha))}</button>`;
+    caja.querySelectorAll('input[type=time]').forEach(t => t.onchange = () => { bloques[t.dataset.k][t.dataset.p] = t.value; });
+    caja.querySelectorAll('[data-quitar]').forEach(b => b.onclick = () => { bloques.splice(Number(b.dataset.quitar), 1); pintar(); });
+    caja.querySelector('[data-x=agregar]').onclick = () => { const u = bloques.length ? bloques[bloques.length - 1][1] : ta; bloques.push([u, tb]); pintar(); };
+    caja.querySelector('[data-x=todo]').onclick = () => { bloques = [[ta, tb]]; pintar(); };
+    caja.querySelector('[data-x=libre]').onclick = () => { bloques = []; pintar(); };
+    caja.querySelector('[data-x=guardar]').onclick = async e => {
+      const b = e.target; b.disabled = true; caja.querySelector('.err').textContent = '';
+      try { const r = await api({ a: 'aGuardarTurnos', token: S.token, barbero: T.id, fecha: d.fecha, bloques: bloques }); cargarTurnos(T.id, r.texto); }
+      catch (x) { b.disabled = false; caja.querySelector('.err').textContent = x.message; }
+    };
+  };
+  pintar();
 }
 
 /* ---------- Formulario ---------- */
@@ -272,7 +506,7 @@ function vistaCreado(r) {
   $('#lista').onclick = () => cargar();
 }
 
-if (S && S.token && S.hasta > Date.now()) cargar(); else vistaLogin();
+if (S && S.token && S.hasta > Date.now()) cargarAgenda(); else vistaLogin();
 </script>
 </body>
 </html>
