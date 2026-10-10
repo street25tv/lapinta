@@ -81,6 +81,7 @@
   .barra { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; margin-top: 6px; }
   .barra span { color: var(--sub); } .barra div { background: var(--card2); border-radius: 6px; height: 10px; overflow: hidden; } .barra i { display: block; height: 100%; background: var(--acc); }
   .hidden { display: none !important; }
+  .tag.ant { background: #2b2410; color: var(--acc); } .tag.ant.ok { background: #10261a; color: var(--ok); } .tag.ant.ret { background: #13233a; color: #7fb2ff; }
 </style>
 </head>
 <body>
@@ -169,7 +170,7 @@ function vistaLista(msg) {
     ${L.map(b => `
       <div class="card">
         <div class="barb"><div><b>${esc(b.nombre)}</b><span class="tag ${b.activo ? 'si' : 'no'}">${b.activo ? 'Activo' : 'Inactivo'}</span>
-          <div class="muted">${esc(b.id)} · ${b.tipo === 'Arriendo' ? 'Arriendo $' + Number(b.arriendo || 0).toLocaleString('es-CO') : 'Comisión ' + (b.pct === '' ? '-' : b.pct) + '%'}${b.whatsapp ? ' · ' + esc(b.whatsapp) : ''}</div></div></div>
+          <div class="muted">${esc(b.id)} · ${b.tipo === 'Arriendo' ? 'Arriendo $' + Number(b.arriendo || 0).toLocaleString('es-CO') : 'Comisión ' + (b.pct === '' ? '-' : b.pct) + '%'}${b.anticipoTipo === 'Valor' || b.anticipoTipo === '%' ? ' · anticipo ' + (b.anticipoTipo === '%' ? b.anticipoValor + '%' : '$' + Number(b.anticipoValor || 0).toLocaleString('es-CO')) : ''}${b.whatsapp ? ' · ' + esc(b.whatsapp) : ''}</div></div></div>
         <div class="muted" style="margin-top:6px">PIN: <span class="pin" data-pin="${esc(b.id)}">••••</span></div>
         <div class="acciones">
           <button class="btn mini sec" data-ver="${esc(b.id)}">Ver PIN</button>
@@ -249,6 +250,9 @@ function botonesCita(c) {
   if (c.estado === 'Confirmada') b.push(`<button class="btn mini sec" data-acc="No asistió" data-cita="${esc(c.id)}">No asistió</button>`,
     `<button class="btn mini peligro" data-acc="Cancelada" data-cita="${esc(c.id)}">Cancelar</button>`);
   if (c.estado === 'Cancelada' || c.estado === 'No asistió') b.push(`<button class="btn mini sec" data-acc="Confirmada" data-cita="${esc(c.id)}">Reactivar</button>`);
+  const antPend = c.anticipo > 0 && (c.anticipoEstado === 'Pendiente' || !c.anticipoEstado);
+  if ((c.estado === 'Pendiente' || c.estado === 'Confirmada') && (antPend || !(c.anticipo > 0)))
+    b.push(`<button class="btn mini ${antPend ? '' : 'sec'}" data-ant="${esc(c.id)}">${antPend ? 'Anticipo recibido' : '+ Anticipo'}</button>`);
   if (c.tel) b.push(`<a class="btn mini sec" target="_blank" rel="noopener" href="${esc(waLink(c.tel, 'Hola ' + c.cliente.split(' ')[0] + ', '))}">WhatsApp</a>`);
   return b.join('');
 }
@@ -257,6 +261,7 @@ function filaCita(c, conFecha) {
   return `<div class="cita">
     <div class="cita-top"><b>${conFecha ? esc(fechaCorta(c.fecha)) + ' · ' : ''}${esc(c.hora12)}</b><span class="tag ${ESTADO_CLASE[c.estado] || ''}">${esc(c.estado)}</span></div>
     <div>${esc(c.cliente)} <span class="muted">· ${esc(c.servicio)}${conFecha ? ' · ' + esc(c.barbero) : ''}</span></div>
+    ${c.anticipo > 0 ? `<span class="tag ant ${c.anticipoEstado === 'Recibido' || c.anticipoEstado === 'Aplicado' ? 'ok' : c.anticipoEstado === 'Retenido' ? 'ret' : ''}" style="margin-left:0">Anticipo $${Number(c.anticipo).toLocaleString('es-CO')} · ${esc((c.anticipoEstado || 'Pendiente').toLowerCase())}</span>` : ''}
     ${c.notas ? `<div class="muted">${esc(c.notas)}</div>` : ''}
     <div class="acciones">${botonesCita(c)}</div>
   </div>`;
@@ -303,13 +308,28 @@ function vistaAgenda(msg, wa) {
   const todas = g.citas.concat(g.pendientes);
   document.querySelectorAll('[data-mover]').forEach(b => b.onclick = () => vistaCitaForm(todas.find(c => c.id === b.dataset.mover)));
   document.querySelectorAll('[data-cobrar]').forEach(b => b.onclick = () => vistaCobro(todas.find(c => c.id === b.dataset.cobrar)));
+  document.querySelectorAll('[data-ant]').forEach(b => b.onclick = async () => {
+    const c = todas.find(x => x.id === b.dataset.ant);
+    const v = prompt('Anticipo recibido de ' + c.cliente + ' (' + c.servicio + ', ' + fechaCorta(c.fecha) + ' ' + c.hora12 + '). Valor:', c.anticipo > 0 ? c.anticipo : '');
+    if (v === null) return;
+    b.disabled = true;
+    try { const r = await api({ a: 'aAnticipoCita', token: S.token, cita: c.id, valor: v }); cargarAgenda(r.texto, r.wa); }
+    catch (e) { b.disabled = false; alert(e.message); }
+  });
   document.querySelectorAll('[data-acc]').forEach(b => b.onclick = async () => {
     const c = todas.find(x => x.id === b.dataset.cita), acc = b.dataset.acc;
-    const pregunta = { 'Cancelada': '¿' + (c.estado === 'Pendiente' ? 'Rechazar' : 'Cancelar') + ' la cita de ' + c.cliente + ' (' + fechaCorta(c.fecha) + ', ' + c.hora12 + ')?',
-      'No asistió': '¿Marcar que ' + c.cliente + ' no asistió?' }[acc];
-    if (pregunta && !confirm(pregunta)) return;
+    const ant = c.anticipo > 0 && c.anticipoEstado === 'Recibido' ? '$' + Number(c.anticipo).toLocaleString('es-CO') : '';
+    let modo = '';
+    if (acc === 'Cancelada' && ant) {
+      if (!confirm('¿Cancelar la cita de ' + c.cliente + ' (' + fechaCorta(c.fecha) + ', ' + c.hora12 + ')?')) return;
+      modo = confirm('El cliente pagó un anticipo de ' + ant + '.\n\n¿La canceló el CLIENTE?\n\nAceptar = sí, el cliente canceló: el anticipo no se devuelve y la barbería cobra su comisión.\nCancelar = la canceló la barbería: el anticipo queda "por devolver".') ? 'retener' : 'devolver';
+    } else {
+      const pregunta = { 'Cancelada': '¿' + (c.estado === 'Pendiente' ? 'Rechazar' : 'Cancelar') + ' la cita de ' + c.cliente + ' (' + fechaCorta(c.fecha) + ', ' + c.hora12 + ')?',
+        'No asistió': '¿Marcar que ' + c.cliente + ' no asistió?' + (ant ? '\n\nEl anticipo de ' + ant + ' no se devuelve: se reparte entre el barbero y la barbería.' : '') }[acc];
+      if (pregunta && !confirm(pregunta)) return;
+    }
     b.disabled = true;
-    try { const r = await api({ a: 'aEstadoCita', token: S.token, cita: c.id, estado: acc }); cargarAgenda(r.texto, r.wa); }
+    try { const r = await api({ a: 'aEstadoCita', token: S.token, cita: c.id, estado: acc, anticipo: modo }); cargarAgenda(r.texto, r.wa); }
     catch (e) { b.disabled = false; alert(e.message); }
   });
 }
@@ -458,8 +478,9 @@ async function vistaCobro(c) {
       ${info.membresia ? `<label class="switch"><input type="checkbox" id="k-memb"> Usar ${esc(info.membresia.plan)} (quedan ${info.membresia.restantes}, vence el ${esc(info.membresia.vence)})</label>` : ''}
       <label for="k-barb">Lo atendió</label>
       <select id="k-barb">${activos.map(b => `<option value="${esc(b.id)}" ${b.id === c.barberoId ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('')}</select>
+      ${info.anticipo ? `<div class="okmsg">Anticipo ya recibido: $${Number(info.anticipo).toLocaleString('es-CO')}. Cobra solo el saldo; el anticipo se suma al registrar.</div>` : ''}
       <div class="fila">
-        <div><label for="k-valor">Valor cobrado</label><input id="k-valor" inputmode="numeric" value="${esc(info.precio)}"></div>
+        <div><label for="k-valor">${info.anticipo ? 'Saldo cobrado' : 'Valor cobrado'}</label><input id="k-valor" inputmode="numeric" value="${esc(Math.max(0, info.precio - (info.anticipo || 0)))}"></div>
         <div><label for="k-prop">Propina</label><input id="k-prop" inputmode="numeric" value="0"></div>
       </div>
       <label for="k-medio">Medio de pago</label>
@@ -469,7 +490,7 @@ async function vistaCobro(c) {
     <button class="btn" id="cobrar">Registrar cobro</button>`;
   $('#volver').onclick = () => vistaAgenda();
   $('#salir').onclick = () => salir();
-  if ($('#k-memb')) $('#k-memb').onchange = e => { $('#k-valor').disabled = e.target.checked; if (e.target.checked) $('#k-valor').value = 0; else $('#k-valor').value = info.precio; };
+  if ($('#k-memb')) $('#k-memb').onchange = e => { $('#k-valor').disabled = e.target.checked; if (e.target.checked) $('#k-valor').value = 0; else $('#k-valor').value = Math.max(0, info.precio - (info.anticipo || 0)); };
   $('#cobrar').onclick = async () => {
     const b = $('#cobrar'); b.disabled = true; $('#msg').textContent = '';
     try {
@@ -584,6 +605,19 @@ function vistaForm(b) {
       <label class="switch"><input type="checkbox" id="f-activo" ${b.activo ? 'checked' : ''}> Activo (aparece en la web y puede entrar al portal)</label>
     </div>
     <div class="card">
+      <b>Anticipo para separar el turno</b>
+      <p class="muted" style="margin:4px 0 0">Hace parte del pago del servicio. Si el cliente cancela o no asiste, no se devuelve y la barbería cobra su comisión sobre ese valor. El barbero también lo puede cambiar en su portal.</p>
+      <div class="fila">
+        <div><label for="f-antipo">Pedir anticipo</label><select id="f-antipo">
+          <option value="No" ${b.anticipoTipo === 'Valor' || b.anticipoTipo === '%' ? '' : 'selected'}>No</option>
+          <option value="Valor" ${b.anticipoTipo === 'Valor' ? 'selected' : ''}>Valor fijo</option>
+          <option value="%" ${b.anticipoTipo === '%' ? 'selected' : ''}>% del servicio</option></select></div>
+        <div id="c-anv"><label for="f-anv" id="l-anv">Valor</label><input id="f-anv" inputmode="numeric" value="${esc(b.anticipoValor || '')}"></div>
+      </div>
+      <div id="c-anc"><label for="f-anc">Cuenta para el anticipo (vacía = la de la barbería en Configuración)</label>
+      <input id="f-anc" maxlength="120" value="${esc(b.cuenta || '')}" placeholder="Nequi 300 123 4567 a nombre de ..."></div>
+    </div>
+    <div class="card">
       <b>Horario base</b>
       <p class="muted" style="margin:4px 0 0">El barbero lo copia a sus turnos desde el portal.</p>
       ${DIAS.map(d => filaDia(d, b.horario[d])).join('')}
@@ -593,6 +627,8 @@ function vistaForm(b) {
     <button class="btn" id="guardar">${nuevo ? 'Crear barbero' : 'Guardar cambios'}</button>`;
   const tipo = () => { const a = $('#f-tipo').value === 'Arriendo'; $('#c-pct').classList.toggle('hidden', a); $('#c-arr').classList.toggle('hidden', !a); };
   $('#f-tipo').onchange = tipo; tipo();
+  const anTipo = () => { const t = $('#f-antipo').value; $('#c-anv').classList.toggle('hidden', t === 'No'); $('#c-anc').classList.toggle('hidden', t === 'No'); $('#l-anv').textContent = t === '%' ? '% del precio' : 'Valor'; };
+  $('#f-antipo').onchange = anTipo; anTipo();
   $('#volver').onclick = () => vistaLista();
   $('#salir').onclick = () => salir();
   document.querySelectorAll('.dia .libre input').forEach(c => c.onchange = () => {
@@ -619,7 +655,8 @@ function vistaForm(b) {
     const btn = $('#guardar'); btn.disabled = true; btn.textContent = 'Guardando…'; $('#msg').textContent = '';
     try {
       const r = await api({ a: 'aGuardarBarbero', token: S.token, id: nuevo ? '' : b.id, nombre: $('#f-nombre').value, whatsapp: $('#f-tel').value,
-        tipo: $('#f-tipo').value, pct: $('#f-pct').value, arriendo: $('#f-arr').value, activo: $('#f-activo').checked, horario });
+        tipo: $('#f-tipo').value, pct: $('#f-pct').value, arriendo: $('#f-arr').value, activo: $('#f-activo').checked, horario,
+        anticipoTipo: $('#f-antipo').value, anticipoValor: $('#f-anv').value, cuenta: $('#f-anc').value });
       if (r.nuevo) vistaCreado(r); else cargar(r.texto);
     } catch (e) { btn.disabled = false; btn.textContent = nuevo ? 'Crear barbero' : 'Guardar cambios'; $('#msg').textContent = e.message; }
   };

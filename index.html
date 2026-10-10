@@ -99,6 +99,8 @@
   .puntos span.on { background: var(--acc); }
   .link { background: none; border: 0; color: var(--acc); cursor: pointer; padding: 10px 0 0; font-weight: 600; font-size: 14px; }
   .hidden { display: none !important; }
+  .anticipo { border-color: #5c4a1c; background: #1e180b; }
+  .anticipo .cuenta { font-size: 17px; font-weight: 700; color: var(--acc); margin: 6px 0; word-break: break-word; }
   @media (prefers-reduced-motion: no-preference) { .vista { animation: entra .18s ease-out; } @keyframes entra { from { opacity: 0; transform: translateY(4px); } } }
 </style>
 </head>
@@ -118,7 +120,7 @@
   <section id="v-micita" class="vista hidden"></section>
   <section id="v-planes" class="vista hidden"></section>
 
-  <div class="aviso"><b>Aviso:</b> LA PINTA nunca te pide pagos por adelantado ni datos de tu banco. Pagas en la barbería. Si alguien te escribe desde otro número pidiendo dinero, no es nosotros.</div>
+  <div class="aviso"><b>Aviso:</b> LA PINTA nunca te pide datos de tu banco. Algunos barberos piden un anticipo para separar el turno: págalo solo a la cuenta que te muestra esta página al reservar. Si alguien te escribe desde otro número pidiendo dinero, no es nosotros.</div>
   <div class="info" id="info"></div>
 </main>
 <a class="soporte hidden" id="soporte" target="_blank" rel="noopener">WhatsApp</a>
@@ -158,6 +160,17 @@ async function api(params, post) {
   }
   throw new Error('No pudimos conectar. Revisa tu internet e inténtalo de nuevo.');
 }
+
+/* Anticipo para separar el turno (lo define cada barbero). */
+function montoAnt(barb, precio) {
+  const a = barb && barb.anticipo;
+  if (!a || !(a.valor > 0)) return 0;
+  precio = Math.round(precio || 0);
+  let m = a.tipo === '%' ? Math.round(precio * Math.min(a.valor, 100) / 100 / 100) * 100 : Math.round(a.valor);
+  if (precio > 0) m = Math.min(m, precio);
+  return Math.max(0, m);
+}
+const NO_REEMBOLSO = 'Si cancelas o no asistes, el anticipo no se devuelve.';
 
 const waLink = (tel, txt) => 'https://wa.me/' + tel + '?text=' + encodeURIComponent(txt);
 function fechaISO(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -278,6 +291,7 @@ function vistaReservar() {
   if (serv && R.fecha) html += '<h2>4 · Hora</h2><div id="horas" class="cargando">Buscando horarios libres…</div>';
   if (serv && R.fecha && R.hora) {
     const yo = leerLS('cliente') || {};
+    const ant = montoAnt(barb, serv.precio);
     html += `<h2>5 · Tus datos</h2>
       <div class="card resumen">
         <div><span>Barbero</span><b>${esc(barb.nombre)}</b></div>
@@ -285,12 +299,14 @@ function vistaReservar() {
         <div><span>Servicio</span><b>${esc(serv.nombre)}</b></div>
         <div><span>Cuándo</span><b>${esc(fechaLarga(R.fecha))}, ${hora12(R.hora)}</b></div>
         <div><span>Precio</span><b>${pesos(serv.precio)}</b></div>
+        ${ant ? `<div><span>Anticipo para separar</span><b>${pesos(ant)}</b></div><div><span>Pagas en la barbería</span><b>${pesos(serv.precio - ant)}</b></div>` : ''}
       </div>
+      ${ant ? `<div class="card anticipo"><b>${esc(barb.nombre)} pide un anticipo de ${pesos(ant)}</b><div class="muted">Te mostramos a qué cuenta enviarlo al confirmar. Tu turno queda separado cuando lo recibamos. El anticipo hace parte del pago del servicio. ${NO_REEMBOLSO}</div></div>` : ''}
       <label for="nombre">Nombre</label><input id="nombre" autocomplete="name" value="${esc(yo.nombre || '')}" placeholder="Tu nombre">
       <label for="tel">WhatsApp</label><input id="tel" type="tel" inputmode="numeric" autocomplete="tel" value="${esc(yo.tel || '')}" placeholder="300 123 4567">
       <div id="err" class="err"></div>
       <button class="btn" id="confirmar">Confirmar reserva</button>
-      <p class="muted">Pagas en la barbería. ${esc(D.advertencia)}</p>`;
+      <p class="muted">${ant ? 'El saldo lo pagas en la barbería.' : 'Pagas en la barbería.'} ${esc(D.advertencia)}</p>`;
   }
   const pistaPrev = $('#pista'), posPrev = pistaPrev ? pistaPrev.scrollLeft : 0;
   v.innerHTML = html;
@@ -348,7 +364,9 @@ async function confirmar() {
     guardar('ultimaCita', { cita: r.cita, t: r.tel });
     const enlace = location.origin + location.pathname + '?cita=' + r.cita + '&t=' + r.tel;
     const waDest = r.waBarbero || D.whatsapp;
-    const msg = 'Hola' + (r.waBarbero ? ' ' + r.barbero : '') + ', reservé en ' + D.negocio + ': ' + r.servicio + ' el ' + r.fechaTxt + ' a las ' + r.hora12 + ' con ' + r.barbero + '. Código ' + r.cita + '.';
+    const ant = r.anticipo && r.anticipo.valor > 0 ? r.anticipo : null;
+    const msg = 'Hola' + (r.waBarbero ? ' ' + r.barbero : '') + ', reservé en ' + D.negocio + ': ' + r.servicio + ' el ' + r.fechaTxt + ' a las ' + r.hora12 + ' con ' + r.barbero + '. Código ' + r.cita + '.' +
+      (ant ? ' Te envío el comprobante del anticipo de ' + pesos(ant.valor) + '.' : '');
     $('#v-reservar').innerHTML = `
       <h2>¡Reserva recibida!</h2>
       <div class="card ok">
@@ -359,12 +377,18 @@ async function confirmar() {
           <div><span>Dónde</span><b>${esc(r.direccion || D.direccion || '')}</b></div>
           <div><span>Cuándo</span><b>${esc(r.fechaTxt)}, ${esc(r.hora12)}</b></div>
           <div><span>Precio</span><b>${pesos(r.precio)}</b></div>
+          ${ant ? `<div><span>Anticipo</span><b>${pesos(ant.valor)}</b></div><div><span>Saldo en la barbería</span><b>${pesos(r.precio - ant.valor)}</b></div>` : ''}
         </div>
       </div>
+      ${ant ? `<div class="card anticipo">
+        <b>Separa tu turno: envía ${pesos(ant.valor)}</b>
+        ${ant.cuenta ? `<div class="cuenta">${esc(ant.cuenta)}</div>` : '<div class="muted">Pide los datos de pago por WhatsApp.</div>'}
+        <div class="muted">Luego manda el comprobante por WhatsApp con tu código ${esc(r.cita)}. Tu cita queda confirmada cuando lo recibamos. ${NO_REEMBOLSO}</div>
+      </div>` : ''}
       ${r.mapa ? `<a class="btn sec" target="_blank" rel="noopener" href="${esc(r.mapa)}">Cómo llegar (Google Maps)</a>` : ''}
       <p class="muted">Te escribiremos por WhatsApp para confirmarla. Guarda este enlace para consultar o cancelar tu cita:</p>
       <div class="card" style="word-break:break-all;font-size:13px">${esc(enlace)}</div>
-      ${waDest ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(waLink(waDest, msg))}">${r.waBarbero ? 'Avisar a ' + esc(r.barbero) + ' por WhatsApp' : 'Avisar por WhatsApp'}</a>` : ''}
+      ${waDest ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(waLink(waDest, msg))}">${ant ? 'Enviar comprobante' + (r.waBarbero ? ' a ' + esc(r.barbero) : '') + ' por WhatsApp' : r.waBarbero ? 'Avisar a ' + esc(r.barbero) + ' por WhatsApp' : 'Avisar por WhatsApp'}</a>` : ''}
       <button class="btn sec" id="otra">Hacer otra reserva</button>`;
     $('#otra').onclick = () => { R.servicio = null; R.barbero = null; R.fecha = null; R.hora = null; vistaReservar(); };
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -408,10 +432,14 @@ async function consultar() {
         </div>
         ${r.mapa ? `<a class="mapa" target="_blank" rel="noopener" href="${esc(r.mapa)}">Cómo llegar ↗</a>` : ''}
       </div>
+      ${r.anticipo ? `<div class="card ${r.anticipo.estado === 'Pendiente' ? 'anticipo' : ''}"><b>Anticipo ${pesos(r.anticipo.valor)} · ${esc(({ Pendiente: 'por pagar', Recibido: 'recibido', Aplicado: 'aplicado al pago', Retenido: 'no reembolsable', 'Por devolver': 'por devolver', Devuelto: 'devuelto', 'No pagado': 'no pagado' })[r.anticipo.estado] || r.anticipo.estado)}</b>
+        ${r.anticipo.estado === 'Pendiente' && r.cancelable ? (r.anticipo.cuenta ? `<div class="cuenta">${esc(r.anticipo.cuenta)}</div>` : '') + `<div class="muted">Envíalo y manda el comprobante por WhatsApp para confirmar tu turno.</div>` : ''}
+        ${r.anticipo.estado === 'Recibido' ? `<div class="muted">En la barbería pagas el saldo: ${pesos(r.anticipo.saldo)}. ${NO_REEMBOLSO}</div>` : ''}</div>` : ''}
       ${r.membresia ? `<div class="card"><b>${esc(r.membresia.plan)}</b><div class="muted">Te quedan ${r.membresia.restantes} servicios · vence el ${esc(r.membresia.vence)}</div></div>` : ''}
       ${r.cancelable ? '<button class="btn sec" id="mc-cancelar">Cancelar esta cita</button>' : ''}`;
     if ($('#mc-cancelar')) $('#mc-cancelar').onclick = async () => {
-      if (!confirm('¿Seguro que quieres cancelar la cita ' + r.cita + '?')) return;
+      const aviso = r.anticipo && r.anticipo.estado === 'Recibido' ? '\n\nTu anticipo de ' + pesos(r.anticipo.valor) + ' no se devuelve.' : '';
+      if (!confirm('¿Seguro que quieres cancelar la cita ' + r.cita + '?' + aviso)) return;
       const b = $('#mc-cancelar'); b.disabled = true; b.textContent = 'Cancelando…';
       try { await api({ a: 'cancelar', cita, t }, true); consultar(); }
       catch (e) { b.disabled = false; b.textContent = 'Cancelar esta cita'; $('#mc-err').textContent = e.message; }

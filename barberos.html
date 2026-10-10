@@ -79,6 +79,11 @@
   .lineas > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
   .lineas > div:last-child { border: 0; } .lineas > div span { color: var(--sub); }
   .hidden { display: none !important; }
+  .ant { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 20px; background: #2b2410; color: var(--acc); white-space: nowrap; }
+  .ant.ok { background: #10261a; color: var(--ok); }
+  .cita-box { padding: 6px 0; border-bottom: 1px dashed var(--line); } .cita-box:last-child { border: 0; }
+  .cita-box .cita { border: 0; padding: 0; }
+  .wa { display: inline-block; margin-top: 8px; background: #25d366; color: #06210f; border-radius: 10px; padding: 8px 12px; font-weight: 700; text-decoration: none; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -236,13 +241,28 @@ function pintar(msg, tipo) {
         <button class="btn" id="guardar">Guardar ${esc(d.txt.split(' ')[0])}</button>
       </div>`;
   }
-  html += `<div class="card"><b>Citas de este día</b>${d.citas.length ? d.citas.map(c =>
-      `<div class="cita"><span>${h12(c.hora)} · ${esc(c.cliente)}</span><span class="muted">${esc(c.servicio)}${c.estado === 'Pendiente' ? ' · pendiente' : ''}</span></div>`).join('')
+  html += `<div class="card"><b>Citas de este día</b>${d.citas.length ? d.citas.map(c => {
+      const pend = c.anticipo > 0 && (c.anticipoEstado === 'Pendiente' || !c.anticipoEstado);
+      return `<div class="cita-box"><div class="cita"><span>${h12(c.hora)} · ${esc(c.cliente)}</span><span class="muted">${esc(c.servicio)}${c.estado === 'Pendiente' ? ' · pendiente' : ''}</span></div>
+        ${c.anticipo > 0 ? `<span class="ant ${c.anticipoEstado === 'Recibido' ? 'ok' : ''}">Anticipo ${pesosB(c.anticipo)} · ${c.anticipoEstado === 'Recibido' ? 'recibido' : pend ? 'por pagar' : esc(c.anticipoEstado.toLowerCase())}</span>` : ''}
+        ${c.id && (pend || !(c.anticipo > 0)) ? `<button class="link" data-ant="${esc(c.id)}">${pend ? 'Recibí el anticipo' : 'Registrar anticipo'}</button>` : ''}
+      </div>`; }).join('') + '<div id="ant-msg"></div>'
       : '<p class="muted">Sin citas todavía.</p>'}</div>`;
   $('#app').innerHTML = html;
 
   enlacesTop();
   document.querySelectorAll('[data-f]').forEach(b => b.onclick = () => elegir(b.dataset.f));
+  document.querySelectorAll('[data-ant]').forEach(b => b.onclick = async () => {
+    const c = d.citas.find(x => x.id === b.dataset.ant);
+    const v = prompt('Anticipo recibido de ' + c.cliente + ' (' + c.servicio + '). Valor:', c.anticipo > 0 ? c.anticipo : '');
+    if (v === null) return;
+    b.disabled = true;
+    try {
+      const r = await api({ a: 'bAnticipoCita', token: S.token, cita: c.id, valor: v });
+      await cargarSemana(true);
+      $('#ant-msg').innerHTML = `<div class="okmsg">${esc(r.texto)}</div>${r.wa ? `<a class="wa" target="_blank" rel="noopener" href="${esc(r.wa)}">Avisar al cliente por WhatsApp</a>` : ''}`;
+    } catch (e) { b.disabled = false; alert(e.message); }
+  });
   if ($('#base')) $('#base').onclick = async () => {
     const b = $('#base'); b.disabled = true; b.textContent = 'Habilitando…';
     try { const r = await api({ a: 'bCopiarBase', token: S.token }); await cargarSemana(true); pintar(r.texto, 'ok'); }
@@ -546,7 +566,23 @@ async function vistaPerfil() {
         <input type="checkbox" value="${esc(s.id)}" ${todos || PF.servicios.indexOf(s.id) >= 0 ? 'checked' : ''}></label>`).join('')}
     </div>
     <div id="pf-msg" class="err"></div>
-    <button class="btn" id="pf-guardar">Guardar perfil</button>`;
+    <button class="btn" id="pf-guardar">Guardar perfil</button>
+    <div class="card" style="margin-top:22px">
+      <b>Anticipo para separar el turno</b>
+      <p class="muted">El cliente lo paga al reservar y se descuenta del precio del servicio. Si cancela o no asiste, no se devuelve y la barbería cobra su comisión sobre ese valor.</p>
+      <div class="fila2">
+        <div><label for="an-tipo">Pedir anticipo</label><select id="an-tipo">
+          <option value="No" ${PF.anticipoTipo === 'Valor' || PF.anticipoTipo === '%' ? '' : 'selected'}>No</option>
+          <option value="Valor" ${PF.anticipoTipo === 'Valor' ? 'selected' : ''}>Valor fijo</option>
+          <option value="%" ${PF.anticipoTipo === '%' ? 'selected' : ''}>% del servicio</option></select></div>
+        <div id="an-v"><label for="an-valor" id="an-lbl">Valor</label><input id="an-valor" inputmode="numeric" value="${esc(PF.anticipoValor)}"></div>
+      </div>
+      <div id="an-c"><label for="an-cuenta">Cuenta donde te pagan (opcional)</label>
+      <input id="an-cuenta" maxlength="120" value="${esc(PF.cuenta)}" placeholder="${esc(PF.cuentaGeneral || 'Nequi 300 123 4567 a nombre de ...')}">
+      <p class="muted">${PF.cuentaGeneral ? 'Si la dejas vacía, el cliente paga a la cuenta de la barbería: ' + esc(PF.cuentaGeneral) + '.' : 'Si la dejas vacía, se usa la cuenta de la barbería (la pone el administrador).'}</p></div>
+      <div id="an-msg" class="err"></div>
+      <button class="btn sec" id="an-guardar">Guardar anticipo</button>
+    </div>`;
   enlacesTop();
   pintarFoto(); enlaceMapa();
   $('#pf-dir').oninput = enlaceMapa; $('#pf-mapa').oninput = enlaceMapa;
@@ -559,6 +595,21 @@ async function vistaPerfil() {
     e.target.value = '';
   };
   $('#pf-quitar').onclick = () => { fotoNueva = ''; pintarFoto(); };
+  const anTipo = () => {
+    const t = $('#an-tipo').value;
+    $('#an-v').classList.toggle('hidden', t === 'No'); $('#an-c').classList.toggle('hidden', t === 'No');
+    $('#an-lbl').textContent = t === '%' ? '% del precio' : 'Valor';
+    $('#an-valor').placeholder = t === '%' ? '30' : '10000';
+  };
+  $('#an-tipo').onchange = anTipo; anTipo();
+  $('#an-guardar').onclick = async () => {
+    const b = $('#an-guardar'); b.disabled = true; $('#an-msg').className = 'err'; $('#an-msg').textContent = '';
+    try {
+      const r = await api({ a: 'bGuardarAnticipo', token: S.token, anticipoTipo: $('#an-tipo').value, anticipoValor: $('#an-valor').value, cuenta: $('#an-cuenta').value });
+      $('#an-msg').className = 'okmsg'; $('#an-msg').textContent = r.texto;
+    } catch (e) { $('#an-msg').textContent = e.message; }
+    b.disabled = false;
+  };
   iniciarGaleria();
   $('#pf-guardar').onclick = async () => {
     const servicios = Array.from(document.querySelectorAll('.serv input:checked')).map(i => i.value);
