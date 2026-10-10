@@ -414,8 +414,8 @@ function vistaTurnos(msg) {
     <button class="btn sec" id="base">Copiar su horario base a los próximos 7 días</button>
     ${T.dias.map((d, i) => `<div class="card dia-t" data-i="${i}">
       <div class="barb"><div><b>${esc(fechaCorta(d.fecha))}</b>
-        <div class="muted">${!d.tienda ? 'Barbería cerrada' : d.bloques.length ? d.bloques.map(r => esc(h12(r[0]) + ' – ' + h12(r[1]))).join(', ') : 'Libre (sin turnos)'}${d.citas.length ? ' · ' + d.citas.length + (d.citas.length === 1 ? ' cita' : ' citas') : ''}</div></div>
-        ${d.tienda ? `<button class="btn mini sec" data-editar-dia="${i}">Editar</button>` : ''}</div>
+        <div class="muted">${d.bloques.length ? d.bloques.map(r => esc(h12(r[0]) + ' – ' + h12(r[1]))).join(', ') : (d.tienda ? 'Libre (sin turnos)' : 'Barbería cerrada · sin turnos')}${d.citas.length ? ' · ' + d.citas.length + (d.citas.length === 1 ? ' cita' : ' citas') : ''}</div></div>
+        <button class="btn mini sec" data-editar-dia="${i}">Editar</button></div>
       <div class="editor"></div>
     </div>`).join('')}`;
   $('#volver').onclick = () => cargarAgenda();
@@ -431,12 +431,12 @@ function vistaTurnos(msg) {
 function editorDia(i) {
   const d = T.dias[i];
   const caja = document.querySelector(`.dia-t[data-i="${i}"] .editor`);
-  const hs = (String(d.tienda).match(/\d{1,2}:\d{2}/g) || ['09:00', '19:00']).map(h => h.padStart(5, '0'));
+  const hs = (String(d.tienda || '').match(/\d{1,2}:\d{2}/g) || ['09:00', '19:00']).map(h => h.padStart(5, '0'));
   const ta = hs[0], tb = hs[1] || hs[0];
   let bloques = d.bloques.map(r => r.map(h => String(h).padStart(5, '0')));
   const pintar = () => {
     caja.innerHTML = `
-      <div class="muted" style="margin-top:8px">La barbería abre ${esc(h12(ta))} – ${esc(h12(tb))}.</div>
+      <div class="muted" style="margin-top:8px">${d.tienda ? 'La barbería abre ' + esc(h12(ta)) + ' – ' + esc(h12(tb)) + '.' : 'La barbería está cerrada este día.'} Los turnos pueden ir a cualquier hora.</div>
       ${bloques.map((r, k) => `<div class="bloque"><input type="time" step="900" value="${esc(r[0])}" data-k="${k}" data-p="0">
         <span class="muted">a</span><input type="time" step="900" value="${esc(r[1])}" data-k="${k}" data-p="1">
         <button class="btn mini sec" data-quitar="${k}" aria-label="Quitar turno">✕</button></div>`).join('') || '<p class="muted">Día libre: no recibe citas.</p>'}
@@ -455,7 +455,12 @@ function editorDia(i) {
     caja.querySelector('[data-x=libre]').onclick = () => { bloques = []; pintar(); };
     caja.querySelector('[data-x=guardar]').onclick = async e => {
       const b = e.target; b.disabled = true; caja.querySelector('.err').textContent = '';
-      try { const r = await api({ a: 'aGuardarTurnos', token: S.token, barbero: T.id, fecha: d.fecha, bloques: bloques }); cargarTurnos(T.id, r.texto); }
+      try {
+        let r;
+        try { r = await api({ a: 'aGuardarTurnos', token: S.token, barbero: T.id, fecha: d.fecha, bloques: bloques }); }
+        catch (x) { if (!/citas fuera/.test(x.message) || !confirm(x.message + '\n\n¿Guardar de todas formas?')) throw x; r = await api({ a: 'aGuardarTurnos', token: S.token, barbero: T.id, fecha: d.fecha, bloques: bloques, forzar: true }); }
+        cargarTurnos(T.id, r.texto);
+      }
       catch (x) { b.disabled = false; caja.querySelector('.err').textContent = x.message; }
     };
   };
