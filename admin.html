@@ -68,6 +68,18 @@
   .dias-nav input { flex: 1; min-width: 0; padding: 9px; }
   .bloque { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 6px; align-items: center; margin-top: 8px; }
   .bloque input { padding: 9px 6px; }
+  .tabs .tab { padding: 8px 12px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+  .chip { background: var(--card2); border: 0; border-radius: 20px; padding: 7px 12px; font-size: 14px; cursor: pointer; color: var(--txt); }
+  .chip.on { background: var(--acc); color: var(--acc-txt); font-weight: 600; }
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .kpi span { color: var(--sub); font-size: 13px; } .kpi b { font-size: 21px; } .kpi small { color: var(--sub); font-size: 12px; }
+  .kpi.acc { border-color: #5a4515; background: #1d180c; } .kpi.acc b { color: var(--acc); }
+  .lineas > div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .lineas > div span { color: var(--sub); } .lineas > div.fuerte b { color: var(--acc); }
+  .barra { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; margin-top: 6px; }
+  .barra span { color: var(--sub); } .barra div { background: var(--card2); border-radius: 6px; height: 10px; overflow: hidden; } .barra i { display: block; height: 100%; background: var(--acc); }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -199,11 +211,12 @@ function vistaLista(msg) {
 function nav(activa) {
   return `<div class="top"><div class="tabs">
       <button class="tab ${activa === 'agenda' ? 'on' : ''}" data-nav="agenda">Agenda</button>
+      <button class="tab ${activa === 'finanzas' ? 'on' : ''}" data-nav="finanzas">Finanzas</button>
       <button class="tab ${activa === 'barberos' ? 'on' : ''}" data-nav="barberos">Barberos</button>
     </div><button class="link" id="salir">Salir</button></div>`;
 }
 function bindNav() {
-  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => (b.dataset.nav === 'agenda' ? cargarAgenda() : cargar()));
+  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => (b.dataset.nav === 'agenda' ? cargarAgenda() : b.dataset.nav === 'finanzas' ? cargarFinanzas() : cargar()));
   if ($('#salir')) $('#salir').onclick = () => salir();
 }
 
@@ -231,6 +244,7 @@ function botonesCita(c) {
   const b = [];
   if (c.estado === 'Pendiente') b.push(`<button class="btn mini" data-acc="Confirmada" data-cita="${esc(c.id)}">Confirmar</button>`,
     `<button class="btn mini peligro" data-acc="Cancelada" data-cita="${esc(c.id)}">Rechazar</button>`);
+  if ((c.estado === 'Pendiente' || c.estado === 'Confirmada') && AG && c.fecha <= AG.hoy) b.push(`<button class="btn mini" data-cobrar="${esc(c.id)}">Cobrar</button>`);
   if (c.estado === 'Pendiente' || c.estado === 'Confirmada') b.push(`<button class="btn mini sec" data-mover="${esc(c.id)}">Mover</button>`);
   if (c.estado === 'Confirmada') b.push(`<button class="btn mini sec" data-acc="No asistió" data-cita="${esc(c.id)}">No asistió</button>`,
     `<button class="btn mini peligro" data-acc="Cancelada" data-cita="${esc(c.id)}">Cancelar</button>`);
@@ -288,6 +302,7 @@ function vistaAgenda(msg, wa) {
   document.querySelectorAll('[data-turnos]').forEach(b => b.onclick = () => cargarTurnos(b.dataset.turnos));
   const todas = g.citas.concat(g.pendientes);
   document.querySelectorAll('[data-mover]').forEach(b => b.onclick = () => vistaCitaForm(todas.find(c => c.id === b.dataset.mover)));
+  document.querySelectorAll('[data-cobrar]').forEach(b => b.onclick = () => vistaCobro(todas.find(c => c.id === b.dataset.cobrar)));
   document.querySelectorAll('[data-acc]').forEach(b => b.onclick = async () => {
     const c = todas.find(x => x.id === b.dataset.cita), acc = b.dataset.acc;
     const pregunta = { 'Cancelada': '¿' + (c.estado === 'Pendiente' ? 'Rechazar' : 'Cancelar') + ' la cita de ' + c.cliente + ' (' + fechaCorta(c.fecha) + ', ' + c.hora12 + ')?',
@@ -425,6 +440,114 @@ function editorDia(i) {
     };
   };
   pintar();
+}
+
+/* ---------- Cobrar una cita ---------- */
+async function vistaCobro(c) {
+  $('#app').innerHTML = '<p class="muted" style="text-align:center;margin-top:24px">Cargando…</p>';
+  let info;
+  try { info = await api({ a: 'aCobroInfo', token: S.token, cita: c.id }); }
+  catch (e) { vistaAgenda(); alert(e.message); return; }
+  const activos = AG.barberos.filter(b => b.activo);
+  $('#app').innerHTML = `
+    <div class="top"><button class="link" id="volver">← Volver a la agenda</button><button class="link" id="salir">Salir</button></div>
+    <h2>Cobrar cita ${esc(c.id)}</h2>
+    <div class="card">
+      <b>${esc(c.cliente)}</b>
+      <div class="muted">${esc(c.servicio)} · ${esc(fechaCorta(c.fecha))}, ${esc(c.hora12)}</div>
+      ${info.membresia ? `<label class="switch"><input type="checkbox" id="k-memb"> Usar ${esc(info.membresia.plan)} (quedan ${info.membresia.restantes}, vence el ${esc(info.membresia.vence)})</label>` : ''}
+      <label for="k-barb">Lo atendió</label>
+      <select id="k-barb">${activos.map(b => `<option value="${esc(b.id)}" ${b.id === c.barberoId ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('')}</select>
+      <div class="fila">
+        <div><label for="k-valor">Valor cobrado</label><input id="k-valor" inputmode="numeric" value="${esc(info.precio)}"></div>
+        <div><label for="k-prop">Propina</label><input id="k-prop" inputmode="numeric" value="0"></div>
+      </div>
+      <label for="k-medio">Medio de pago</label>
+      <select id="k-medio">${info.medios.map(m => `<option>${esc(m)}</option>`).join('')}</select>
+    </div>
+    <div id="msg" class="err"></div>
+    <button class="btn" id="cobrar">Registrar cobro</button>`;
+  $('#volver').onclick = () => vistaAgenda();
+  $('#salir').onclick = () => salir();
+  if ($('#k-memb')) $('#k-memb').onchange = e => { $('#k-valor').disabled = e.target.checked; if (e.target.checked) $('#k-valor').value = 0; else $('#k-valor').value = info.precio; };
+  $('#cobrar').onclick = async () => {
+    const b = $('#cobrar'); b.disabled = true; $('#msg').textContent = '';
+    try {
+      const r = await api({ a: 'aCobrarCita', token: S.token, cita: c.id, barbero: $('#k-barb').value, valor: $('#k-valor').value,
+        propina: $('#k-prop').value, medio: $('#k-medio').value, usarMembresia: !!($('#k-memb') && $('#k-memb').checked) });
+      cargarAgenda(r.texto);
+    } catch (e) { b.disabled = false; $('#msg').textContent = e.message; }
+  };
+}
+
+/* ---------- Finanzas ---------- */
+let F = { rango: 'semana', desde: '', hasta: '', barbero: '*' };
+let FD = null;
+const pesosF = v => (v < 0 ? '-$' : '$') + Math.abs(Math.round(v || 0)).toLocaleString('es-CO');
+function rangoFechas(r, hoy) {
+  const d = new Date(hoy + 'T12:00:00'), iso = x => x.toISOString().slice(0, 10);
+  if (r === 'hoy') return [hoy, hoy];
+  if (r === 'semana') { const l = new Date(d); l.setDate(l.getDate() - ((l.getDay() + 6) % 7)); return [iso(l), hoy]; }
+  if (r === 'mes') return [hoy.slice(0, 8) + '01', hoy];
+  if (r === 'mesant') { const a = new Date(d.getFullYear(), d.getMonth() - 1, 1, 12), z = new Date(d.getFullYear(), d.getMonth(), 0, 12); return [iso(a), iso(z)]; }
+  return [F.desde || hoy, F.hasta || hoy];
+}
+
+async function cargarFinanzas(msg) {
+  $('#app').innerHTML = nav('finanzas') + '<p class="muted" style="text-align:center;margin-top:24px">Calculando…</p>';
+  bindNav();
+  const hoy = (FD && FD.hoy) || (AG && AG.hoy) || new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+  const [desde, hasta] = rangoFechas(F.rango, hoy);
+  try { FD = await api({ a: 'aFinanzas', token: S.token, desde, hasta, barbero: F.barbero }); F.desde = FD.desde; F.hasta = FD.hasta; vistaFinanzas(msg); }
+  catch (e) { if (S) { $('#app').innerHTML = nav('finanzas') + `<div class="err">${esc(e.message)}</div><button class="btn sec" id="re">Reintentar</button>`; bindNav(); $('#re').onclick = () => cargarFinanzas(); } }
+}
+
+function vistaFinanzas(msg) {
+  const d = FD, t = d.totales;
+  const chips = [['hoy', 'Hoy'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['mesant', 'Mes pasado'], ['otro', 'Otro']];
+  const maxDia = Math.max(1, ...d.porDia.map(x => x.valor));
+  $('#app').innerHTML = nav('finanzas') + (msg ? `<div class="okmsg">${esc(msg)}</div>` : '') + `
+    <div class="chips">${chips.map(c => `<button class="chip ${F.rango === c[0] ? 'on' : ''}" data-rango="${c[0]}">${c[1]}</button>`).join('')}</div>
+    <div class="fila ${F.rango === 'otro' ? '' : 'hidden'}" id="otro" style="margin-top:8px">
+      <div><label for="f-desde">Desde</label><input type="date" id="f-desde" value="${esc(d.desde)}"></div>
+      <div><label for="f-hasta">Hasta</label><input type="date" id="f-hasta" value="${esc(d.hasta)}"></div>
+    </div>
+    <label for="f-barbf">Barbero</label>
+    <select id="f-barbf"><option value="*">Todos</option>${(AG ? AG.barberos : d.barberos).map(b => `<option value="${esc(b.id)}" ${F.barbero === b.id ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('')}</select>
+    <h2>${esc(d.periodoTxt)}</h2>
+    <div class="kpis">
+      <div class="kpi"><span>Ingresos</span><b>${pesosF(t.ingresos)}</b><small>${t.servicios} ${t.servicios === 1 ? 'servicio' : 'servicios'}${t.membresias ? ' · planes ' + pesosF(t.membresias) : ''}</small></div>
+      <div class="kpi acc"><span>Para la barbería</span><b>${pesosF(t.barberia)}</b><small>comisiones${t.arriendos ? ' y arriendos' : ''}${t.membresias ? ' + planes' : ''}</small></div>
+      <div class="kpi"><span>Pago a barberos</span><b>${pesosF(t.pagoBarberos)}</b><small>${t.porCobrar ? 'te deben ' + pesosF(t.porCobrar) + ' de arriendo' : 'incluye propinas'}</small></div>
+      <div class="kpi"><span>Propinas</span><b>${pesosF(t.propinas)}</b><small>ticket promedio ${pesosF(t.ticket)}</small></div>
+    </div>
+    <h2>Por barbero</h2>
+    ${d.barberos.filter(b => b.servicios || b.arriendo).length ? d.barberos.filter(b => b.servicios || b.arriendo).map(b => `<div class="card">
+      <div class="barb"><div><b>${esc(b.nombre)}</b><div class="muted">${b.tipo === 'Arriendo' ? 'Arriendo ' + pesosF(b.arriendoSemanal) + '/semana' : 'Comisión ' + b.pct + '% para el barbero'} · ${b.servicios} serv.</div></div></div>
+      <div class="lineas">
+        <div><span>Cobrado</span><b>${pesosF(b.cobrado)}</b></div>
+        <div><span>${b.tipo === 'Arriendo' ? 'Sus servicios − arriendo' : 'Su comisión'}</span><b>${pesosF(b.parte)}</b></div>
+        <div><span>Propinas</span><b>${pesosF(b.propinas)}</b></div>
+        <div><span>${b.pagar < 0 ? 'Debe a la barbería' : 'Se le paga'}</span><b>${pesosF(Math.abs(b.pagar))}</b></div>
+        <div class="fuerte"><span>Para la barbería${b.tipo === 'Arriendo' ? ' (arriendo)' : ''}</span><b>${pesosF(b.barberia)}</b></div>
+      </div></div>`).join('') : '<p class="muted">Sin barberos en este periodo.</p>'}
+    ${F.barbero === '*' ? '<button class="btn sec" id="liq">Guardar liquidación de este periodo en la hoja</button>' : ''}
+    <div class="card"><b>Medios de pago</b>${d.medios.length ? d.medios.map(m => `<div class="lineas"><div><span>${esc(m.medio)}</span><b>${pesosF(m.valor)}</b></div></div>`).join('') : '<p class="muted">Sin cobros.</p>'}</div>
+    ${d.serviciosTop.length ? `<div class="card"><b>Servicios más vendidos</b>${d.serviciosTop.map(s => `<div class="lineas"><div><span>${esc(s.nombre)} · ${s.cantidad}</span><b>${pesosF(s.valor)}</b></div></div>`).join('')}</div>` : ''}
+    ${d.porDia.length > 1 ? `<div class="card"><b>Ingresos por día</b>${d.porDia.map(x => `<div class="barra"><span>${esc(fechaCorta(x.fecha))}</span><div><i style="width:${Math.max(2, Math.round(x.valor / maxDia * 100))}%"></i></div><b>${pesosF(x.valor)}</b></div>`).join('')}</div>` : ''}
+    <div class="card"><b>Últimos cobros</b>${d.cobros.length ? d.cobros.map(x => `<div class="cita"><div class="cita-top"><b>${esc(fechaCorta(x.fecha))} · ${esc(h12(x.hora))}</b><b>${pesosF(x.valor + x.propina)}</b></div>
+      <div class="muted">${esc(x.cliente)} · ${esc(x.concepto)} · ${esc(x.barbero)} · ${esc(x.medio)}${x.propina ? ' · propina ' + pesosF(x.propina) : ''}</div></div>`).join('') : '<p class="muted">Todavía no hay cobros en este periodo. Se registran con el botón Cobrar de la agenda o desde la hoja.</p>'}</div>`;
+  bindNav();
+  document.querySelectorAll('[data-rango]').forEach(b => b.onclick = () => { F.rango = b.dataset.rango; if (F.rango === 'otro') vistaFinanzas(); else cargarFinanzas(); });
+  const otro = () => { if ($('#f-desde').value && $('#f-hasta').value) { F.desde = $('#f-desde').value; F.hasta = $('#f-hasta').value; cargarFinanzas(); } };
+  $('#f-desde').onchange = otro; $('#f-hasta').onchange = otro;
+  $('#f-barbf').onchange = e => { F.barbero = e.target.value; cargarFinanzas(); };
+  if ($('#liq')) $('#liq').onclick = async () => {
+    if (!confirm('¿Guardar la liquidación del ' + d.periodoTxt + ' en la pestaña Liquidaciones?')) return;
+    const b = $('#liq'); b.disabled = true;
+    try { const r = await api({ a: 'aGuardarLiquidacion', token: S.token, desde: d.desde, hasta: d.hasta }); vistaFinanzas(r.texto); }
+    catch (e) { b.disabled = false; alert(e.message); }
+  };
 }
 
 /* ---------- Formulario ---------- */
