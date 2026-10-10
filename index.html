@@ -42,6 +42,8 @@
          background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px; cursor: pointer; }
   .opt b { font-weight: 600; }
   .opt .meta { color: var(--sub); font-size: 13px; white-space: nowrap; }
+  .opt-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .opt .desc { color: var(--sub); font-size: 13px; font-weight: 400; }
   .opt.on { border-color: var(--acc); background: #241e10; }
   .barb { display: flex; gap: 12px; align-items: center; width: 100%; background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; cursor: pointer; }
   .barb.on { border-color: var(--acc); background: #241e10; }
@@ -259,7 +261,7 @@ function vistaReservar() {
   if (barb) html += '<button class="link" id="cambiar">← Ver todos los barberos</button>' + (barb.galeria ? '<div id="galeria" class="carrusel">' + galeriaHtml(barb) + '</div>' : '');
   if (barb) {
     html += '<h2 id="paso2">2 · Servicio</h2>' + (servs.length ? '<div class="grid">' + servs.map(s =>
-      `<button class="opt ${s.id === R.servicio ? 'on' : ''}" data-s="${esc(s.id)}"><b>${esc(s.nombre)}</b><span class="meta">${pesos(s.precio)} · ${s.dur} min</span></button>`).join('') + '</div>'
+      `<button class="opt ${s.id === R.servicio ? 'on' : ''}" data-s="${esc(s.id)}"><span class="opt-txt"><b>${esc(s.nombre)}</b>${s.desc ? `<span class="desc">${esc(s.desc)}</span>` : ''}</span><span class="meta">${pesos(s.precio)} · ${s.dur} min</span></button>`).join('') + '</div>'
       : '<p class="muted">Este barbero todavía no tiene servicios disponibles.</p>');
   }
   if (serv) {
