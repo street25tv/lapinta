@@ -345,7 +345,8 @@ async function confirmar() {
     guardar('cliente', { nombre, tel });
     guardar('ultimaCita', { cita: r.cita, t: r.tel });
     const enlace = location.origin + location.pathname + '?cita=' + r.cita + '&t=' + r.tel;
-    const msg = 'Hola, reservé en ' + D.negocio + ': ' + r.servicio + ' el ' + r.fechaTxt + ' a las ' + r.hora12 + ' con ' + r.barbero + '. Código ' + r.cita + '.';
+    const waDest = r.waBarbero || D.whatsapp;
+    const msg = 'Hola' + (r.waBarbero ? ' ' + r.barbero : '') + ', reservé en ' + D.negocio + ': ' + r.servicio + ' el ' + r.fechaTxt + ' a las ' + r.hora12 + ' con ' + r.barbero + '. Código ' + r.cita + '.';
     $('#v-reservar').innerHTML = `
       <h2>¡Reserva recibida!</h2>
       <div class="card ok">
@@ -361,7 +362,7 @@ async function confirmar() {
       ${r.mapa ? `<a class="btn sec" target="_blank" rel="noopener" href="${esc(r.mapa)}">Cómo llegar (Google Maps)</a>` : ''}
       <p class="muted">Te escribiremos por WhatsApp para confirmarla. Guarda este enlace para consultar o cancelar tu cita:</p>
       <div class="card" style="word-break:break-all;font-size:13px">${esc(enlace)}</div>
-      ${D.whatsapp ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(waLink(D.whatsapp, msg))}">Avisar por WhatsApp</a>` : ''}
+      ${waDest ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(waLink(waDest, msg))}">${r.waBarbero ? 'Avisar a ' + esc(r.barbero) + ' por WhatsApp' : 'Avisar por WhatsApp'}</a>` : ''}
       <button class="btn sec" id="otra">Hacer otra reserva</button>`;
     $('#otra').onclick = () => { R.servicio = null; R.barbero = null; R.fecha = null; R.hora = null; vistaReservar(); };
     window.scrollTo({ top: 0, behavior: 'smooth' });
