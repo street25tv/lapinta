@@ -70,6 +70,14 @@
   .borrar { position: absolute; top: 4px; right: 4px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(0,0,0,.7); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
   .sv-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .fila2 { display: flex; gap: 8px; } .fila2 > div { flex: 1; min-width: 0; }
+  .tabs button { padding: 10px 4px; font-size: 13px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .chip { background: var(--card2); border: 0; border-radius: 20px; padding: 7px 12px; font-size: 14px; cursor: pointer; color: var(--txt); }
+  .chip.on { background: var(--acc); color: var(--acc-txt); font-weight: 600; }
+  .gan { border-color: #5a4515; background: #1d180c; }
+  .grande-g { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 44px; letter-spacing: 1px; color: var(--acc); line-height: 1.1; }
+  .lineas > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .lineas > div:last-child { border: 0; } .lineas > div span { color: var(--sub); }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -334,13 +342,53 @@ function formServicio(x) {
   };
 }
 
+/* ---------- Mis ganancias ---------- */
+let G = { rango: 'semana' };
+function rangoG(r) {
+  const hoy = new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10), d = new Date(hoy + 'T12:00:00'), iso = x => x.toISOString().slice(0, 10);
+  if (r === 'hoy') return [hoy, hoy];
+  if (r === 'mes') return [hoy.slice(0, 8) + '01', hoy];
+  if (r === 'mesant') return [iso(new Date(d.getFullYear(), d.getMonth() - 1, 1, 12)), iso(new Date(d.getFullYear(), d.getMonth(), 0, 12))];
+  const l = new Date(d); l.setDate(l.getDate() - ((l.getDay() + 6) % 7)); return [iso(l), hoy];
+}
+async function vistaGanancias() {
+  $('#app').innerHTML = topHtml('ganancias') + '<p class="muted" style="text-align:center">Calculando…</p>';
+  enlacesTop();
+  const [desde, hasta] = rangoG(G.rango);
+  let d;
+  try { d = await api({ a: 'bGanancias', token: S.token, desde, hasta }); }
+  catch (e) { if (S) { $('#app').innerHTML = topHtml('ganancias') + `<div class="err">${esc(e.message)}</div>`; enlacesTop(); } return; }
+  const y = d.yo || { servicios: 0, cobrado: 0, parte: 0, propinas: 0, pagar: 0, barberia: 0, tipo: 'Comisión', pct: '', arriendo: 0, arriendoSemanal: 0 };
+  const chips = [['hoy', 'Hoy'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['mesant', 'Mes pasado']];
+  $('#app').innerHTML = topHtml('ganancias') + `
+    <div class="chips">${chips.map(c => `<button class="chip ${G.rango === c[0] ? 'on' : ''}" data-g="${c[0]}">${c[1]}</button>`).join('')}</div>
+    <h2>${esc(d.periodoTxt)}</h2>
+    <div class="card gan">
+      <div class="muted">${y.pagar < 0 ? 'Le debes a la barbería (arriendo)' : 'Te corresponde'}</div>
+      <div class="grande-g">${pesosB(Math.abs(y.pagar))}</div>
+      <div class="muted">${y.servicios} ${y.servicios === 1 ? 'servicio' : 'servicios'} · ${y.tipo === 'Arriendo' ? 'arriendo ' + pesosB(y.arriendoSemanal) + ' por semana' : 'tu comisión es del ' + y.pct + '%'}</div>
+    </div>
+    <div class="card lineas">
+      <div><span>Cobrado a tus clientes</span><b>${pesosB(y.cobrado)}</b></div>
+      <div><span>${y.tipo === 'Arriendo' ? 'Tus servicios' : 'Tu comisión'}</span><b>${pesosB(y.tipo === 'Arriendo' ? y.parte + y.arriendo : y.parte)}</b></div>
+      ${y.tipo === 'Arriendo' ? `<div><span>Arriendo del periodo</span><b>− ${pesosB(y.arriendo)}</b></div>` : ''}
+      <div><span>Propinas</span><b>${pesosB(y.propinas)}</b></div>
+      <div><span>${y.tipo === 'Arriendo' ? 'Arriendo para la barbería' : 'Comisión de la barbería'}</span><b>${pesosB(y.barberia)}</b></div>
+    </div>
+    ${d.serviciosTop.length ? `<div class="card"><b>Lo que más hiciste</b><div class="lineas">${d.serviciosTop.map(s => `<div><span>${esc(s.nombre)} · ${s.cantidad}</span><b>${pesosB(s.valor)}</b></div>`).join('')}</div></div>` : ''}
+    <div class="card"><b>Tus cobros</b>${d.cobros.length ? d.cobros.map(x => `<div class="cita"><span>${esc(x.fecha.slice(8))}/${esc(x.fecha.slice(5, 7))} · ${esc(x.cliente)}</span><span class="muted">${esc(x.concepto)} · ${pesosB(x.valor)}${x.propina ? ' + ' + pesosB(x.propina) : ''}</span></div>`).join('') : '<p class="muted">Todavía no hay cobros registrados en este periodo.</p>'}</div>
+    <p class="muted">Se cuenta lo que la barbería registra al cobrar cada servicio.</p>`;
+  enlacesTop();
+  document.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { G.rango = b.dataset.g; vistaGanancias(); });
+}
+
 /* ---------- Mi perfil ---------- */
 let PF = null;          // datos del perfil
 let fotoNueva;          // undefined = sin cambio, '' = quitar, 'data:...' = nueva
 
 function topHtml(v) {
   return `<div class="top"><div>Hola <b>${esc(S.nombre.split(' ')[0])}</b></div><button class="link" id="salir">Salir</button></div>
-    <div class="tabs"><button class="${v === 'turnos' ? 'on' : ''}" data-v="turnos">Mis turnos</button><button class="${v === 'servicios' ? 'on' : ''}" data-v="servicios">Mis servicios</button><button class="${v === 'perfil' ? 'on' : ''}" data-v="perfil">Mi perfil</button></div>`;
+    <div class="tabs"><button class="${v === 'turnos' ? 'on' : ''}" data-v="turnos">Mis turnos</button><button class="${v === 'servicios' ? 'on' : ''}" data-v="servicios">Mis servicios</button><button class="${v === 'perfil' ? 'on' : ''}" data-v="perfil">Mi perfil</button><button class="${v === 'ganancias' ? 'on' : ''}" data-v="ganancias">Ganancias</button></div>`;
 }
 
 function enlacesTop() {
@@ -348,6 +396,7 @@ function enlacesTop() {
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => {
     if (b.dataset.v === 'perfil') vistaPerfil();
     else if (b.dataset.v === 'servicios') vistaServicios();
+    else if (b.dataset.v === 'ganancias') vistaGanancias();
     else if (W) pintar(); else cargarSemana();
   });
 }
