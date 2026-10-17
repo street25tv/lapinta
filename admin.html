@@ -125,6 +125,8 @@ async function api(params) {
 }
 
 const waLink = (tel, txt) => 'https://wa.me/' + tel + '?text=' + encodeURIComponent(txt);
+/* Enlace directo al perfil de cada barbero en la web de reservas (?b=B01) */
+const enlaceBarbero = id => location.origin + location.pathname.replace(/[^\/]*$/, '') + '?b=' + encodeURIComponent(id);
 const msgBienvenida = (nombre, pin) => 'Hola ' + nombre.split(' ')[0] + ', bienvenido a LA PINTA. Entra a tu portal de barbero: ' + PORTAL +
   '\nTu PIN es ' + pin + ' (no lo compartas).\n1) En "Mi perfil" sube tu foto, dirección, servicios y fotos de tus trabajos.\n2) En "Mis turnos" habilita tu horario para recibir reservas.';
 
@@ -172,16 +174,25 @@ function vistaLista(msg) {
         <div class="barb"><div><b>${esc(b.nombre)}</b><span class="tag ${b.activo ? 'si' : 'no'}">${b.activo ? 'Activo' : 'Inactivo'}</span>
           <div class="muted">${esc(b.id)} · ${b.tipo === 'Arriendo' ? 'Arriendo $' + Number(b.arriendo || 0).toLocaleString('es-CO') : 'Comisión ' + (b.pct === '' ? '-' : b.pct) + '%'}${b.anticipoTipo === 'Valor' || b.anticipoTipo === '%' ? ' · anticipo ' + (b.anticipoTipo === '%' ? b.anticipoValor + '%' : '$' + Number(b.anticipoValor || 0).toLocaleString('es-CO')) : ''}${b.whatsapp ? ' · ' + esc(b.whatsapp) : ''}</div></div></div>
         <div class="muted" style="margin-top:6px">PIN: <span class="pin" data-pin="${esc(b.id)}">••••</span></div>
+        <div class="muted" style="margin-top:4px;word-break:break-all">Enlace: <span data-enlace="${esc(b.id)}" style="user-select:all">${esc(enlaceBarbero(b.id))}</span></div>
         <div class="acciones">
           <button class="btn mini sec" data-ver="${esc(b.id)}">Ver PIN</button>
           <button class="btn mini sec" data-editar="${esc(b.id)}">Editar</button>
           <button class="btn mini sec" data-nuevopin="${esc(b.id)}">Nuevo PIN</button>
+          <button class="btn mini sec" data-link="${esc(b.id)}">Copiar enlace</button>
+          ${b.whatsapp ? `<a class="btn mini sec" target="_blank" rel="noopener" href="${esc(waLink(b.whatsapp, 'Hola ' + b.nombre.split(' ')[0] + ', este es tu enlace para que tus clientes reserven contigo en LA PINTA: ' + enlaceBarbero(b.id)))}">Enviar enlace</a>` : ''}
           ${b.whatsapp && b.pin ? `<a class="btn mini sec" target="_blank" rel="noopener" href="${esc(waLink(b.whatsapp, msgBienvenida(b.nombre, b.pin)))}">Enviar acceso</a>` : ''}
           <button class="btn mini peligro" data-eliminar="${esc(b.id)}">Eliminar</button>
         </div>
       </div>`).join('') || '<p class="muted">Todavía no hay barberos.</p>'}`;
   bindNav();
   $('#nuevo').onclick = () => vistaForm(null);
+  document.querySelectorAll('[data-link]').forEach(b => b.onclick = () => {
+    const t = enlaceBarbero(b.dataset.link);
+    const ok = () => { b.textContent = 'Copiado ✓'; setTimeout(() => { b.textContent = 'Copiar enlace'; }, 1800); };
+    const manual = () => { const el = document.querySelector(`[data-enlace="${b.dataset.link}"]`); const r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent = 'Selecciónalo y copia'; };
+    try { navigator.clipboard.writeText(t).then(ok, manual); } catch (e) { manual(); }
+  });
   document.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => {
     const x = L.find(y => y.id === b.dataset.ver), el = document.querySelector(`[data-pin="${b.dataset.ver}"]`);
     const ver = el.textContent === '••••';
