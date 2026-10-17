@@ -459,6 +459,16 @@ function vistaPlanes() {
     </div>`).join('') + '<p class="muted">El plan se activa en la barbería al pagar.</p>';
 }
 
+/* ---------- Enlace directo a un barbero: ?b=B01 ---------- */
+function barberoDelEnlace(q) {
+  const v = String(q.get('b') || '').trim().toUpperCase();
+  if (!v || !D || !D.barberos) return;
+  const b = D.barberos.find(x => String(x.id).toUpperCase() === v);
+  if (!b) return;
+  if (!R.barbero) R.barbero = b.id;
+  if (R.barbero === b.id) document.title = 'Reserva con ' + String(b.nombre).split(' ')[0] + ' · ' + D.negocio;
+}
+
 /* ---------- Inicio ---------- */
 function pintarDatos() {
   document.title = D.negocio + ' · Reserva tu cita';
@@ -471,10 +481,10 @@ function pintarDatos() {
 (async function iniciar() {
   const q = new URLSearchParams(location.search);
   const previo = leerLS('datos');
-  if (previo) { D = previo; D.hoy = fechaISO(new Date()); pintarDatos(); vistaReservar(); }
+  if (previo) { D = previo; D.hoy = fechaISO(new Date()); pintarDatos(); barberoDelEnlace(q); vistaReservar(); }
   try {
     const r = await api({ a: 'datos' });
-    D = r; guardar('datos', r); pintarDatos();
+    D = r; guardar('datos', r); pintarDatos(); barberoDelEnlace(q);
     if (!q.get('cita')) vistaReservar();
     cargarFotos();
   } catch (e) {
@@ -485,3 +495,4 @@ function pintarDatos() {
 </script>
 </body>
 </html>
+
